@@ -1,0 +1,231 @@
+use std::sync::Arc;
+
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use ring::hmac::{self, HMAC_SHA1_FOR_LEGACY_USE_ONLY, Key, sign};
+use tracing::{
+    Level, Span,
+    field::{self},
+    span,
+};
+
+use crate::{
+    coding::{Decode, Encode},
+    error::ProtoError,
+    wire::{
+        MI_ATTR_LENGTH, STUN_HEADER_LEN,
+        attribute::{AKind, AttributeTrait, MessageIntegAttr, RealmAttr, StunAttrs, UsernameAttr},
+        method::Method,
+    },
+};
+
+use super::{Cookie, StunMessage, TranID};
+
+#[derive(Clone, Debug)]
+pub struct TurnMessage {
+    pub method: Method,
+    pub tid: TranID,
+    pub attrs: StunAttrs,
+    // Challenge blob to verify message integrity. It is optional, because only few TURN methods have MI.
+    pub challenge: Option<Bytes>,
+    authenticated: bool,
+    credential: Option<Vec<u8>>,
+    pub(crate) span: Span,
+}
+
+impl TurnMessage {
+    pub fn get_span(method: Method) -> Span {
+        match method {
+            Method::Allocate(_) => span!(Level::INFO, "Allocate",),
+            Method::Permission(_) => span!(Level::INFO, "Permission"),
+            Method::ChannelBind(_) => span!(Level::INFO, "ChannelBind"),
+            Method::Refresh(_) => span!(Level::INFO, "Refresh", lifetime = field::Empty),
+            Method::Stun(_) => span!(Level::INFO, "Stun"),
+            Method::SendIndication => span!(Level::INFO, "SendIndication"),
+            Method::DataIndication => span!(Level::INFO, "DataIndication"),
+            Method::ChannelData(_) => span!(Level::INFO, "ChannelData"),
+            Method::UnknownMethod(_) => todo!(),
+        }
+    }
+    pub fn new(method: Method, tid: TranID) -> Self {
+        Self {
+            method,
+            tid,
+            attrs: StunAttrs::default(),
+            challenge: None,
+            authenticated: false,
+            credential: None,
+            span: Self::get_span(method),
+        }
+    }
+
+    // Extends the existing TURN Message in to a another message with the provided Method.
+    // Extremely useful when creating valid Responses for TURN Requests.
+    pub fn extend(&self, method: Method) -> TurnMessage {
+        TurnMessage {
+            method,
+            tid: self.tid.clone(),
+            attrs: Default::default(),
+            challenge: None,
+            authenticated: false,
+            credential: self.credential.clone(), // We also copy credentials, make sure responses doesn't need password when computing MI.
+            span: self.span.clone(),
+        }
+    }
+
+    pub fn is_attrs(&self, attrs: Vec<AKind>) -> Result<(), AKind> {
+        self.attrs.is_attrs(attrs)
+    }
+
+    pub fn is_attr<T: AttributeTrait>(&self) -> bool {
+        self.attrs.is_attr::<T>()
+    }
+
+    pub fn get_attr<T: AttributeTrait>(&self) -> Result<T::Inner, ProtoError> {
+        self.attrs.get_attr::<T>(&self.tid).map_err(|_| ProtoError::AttrMissing)
+    }
+
+    pub fn set_attr<T: AttributeTrait>(&mut self, data: T::Inner) {
+        self.attrs.set_attr::<T>(data, &self.tid);
+    }
+
+    pub(crate) fn is_authenticated(&self) -> bool {
+        self.authenticated
+    }
+
+    pub fn in_scope<T, F: FnOnce() -> T>(&self, f: F) -> T {
+        let _e = self.span.enter();
+        f()
+    }
+
+    pub fn authenticate(&mut self, password: &String) -> Result<(), ProtoError> {
+        let credential = match &self.credential {
+            Some(cred) => cred.to_owned(),
+            None => self
+                .compute_credential(&password)
+                .map_err(|e| ProtoError::MessageIntegrityFailed(format!("{}", e)))?,
+        };
+
+        let challenge = match &self.challenge {
+            Some(c) => c.to_owned(),
+            None => return Err(ProtoError::MessageIntegrityFailed("No challenge blob".into())),
+        };
+
+        let key = hmac::Key::new(HMAC_SHA1_FOR_LEGACY_USE_ONLY, &credential);
+        let tag = sign(&key, &challenge);
+
+        let integbyes = self
+            .get_attr::<MessageIntegAttr>()
+            .map_err(|e| ProtoError::MessageIntegrityFailed(format!("{}", e)))?;
+
+        if tag.as_ref() == integbyes {
+            self.authenticated = true;
+            return Ok(());
+        }
+
+        Err(ProtoError::MessageIntegrityFailed("MI Check Failed".into()))
+    }
+
+    pub(crate) fn compute_credential(&mut self, password: &String) -> anyhow::Result<Vec<u8>> {
+        let turnusername = self.get_attr::<UsernameAttr>()?;
+        let realm = self.get_attr::<RealmAttr>()?;
+        let credential = turnusername + ":" + &realm + ":" + &password;
+        let credential = md5::compute(credential).to_vec();
+        self.credential = Some(credential.clone());
+        Ok(credential)
+    }
+
+    pub(crate) fn compute_integrity(&self) -> Result<Bytes, ProtoError> {
+        let credential = match &self.credential {
+            Some(cred) => cred.to_owned(),
+            None => {
+                return Err(ProtoError::MessageIntegrityFailed("Compute Integrity Failed : Missing Credential".into()));
+            }
+        };
+
+        let mut buffer = Vec::new();
+        self.encode(&mut buffer)?;
+
+        let attrlen = buffer.len() - STUN_HEADER_LEN; // Length of the attributes
+        let modlen: u16 = (attrlen + MI_ATTR_LENGTH) as u16; // Adding additional lenght for MI Attr
+
+        let modlenbytes = modlen.to_be_bytes();
+        buffer[2] = modlenbytes[0];
+        buffer[3] = modlenbytes[1];
+
+        let key = Key::new(HMAC_SHA1_FOR_LEGACY_USE_ONLY, &credential);
+        let tag = sign(&key, &buffer);
+
+        Ok(Bytes::copy_from_slice(tag.as_ref()))
+    }
+}
+
+impl Decode for TurnMessage {
+    type Output = Self;
+    fn decode<B: Buf>(buffer: &mut B) -> Result<Self::Output, ProtoError> {
+        // Order of decoding is important.
+        let method = Method::decode(buffer)?;
+        let attrlen = usize::decode(buffer)?;
+        let _cookie = Cookie::decode(buffer)?;
+        let tid = TranID::decode(buffer)?;
+
+        if buffer.remaining() < attrlen {
+            return Err(ProtoError::NeedMoreData)?;
+        }
+
+        // Zero-Copy if underlying B is Bytes
+        let mut attrbytes = buffer.copy_to_bytes(attrlen);
+
+        // Create a cursor so that attrbytes doesn't advance. We need it in place to compute Challenge blob.
+        let mut cursor = std::io::Cursor::new(&mut attrbytes);
+        let (attrs, mipos) = StunAttrs::decode(&mut cursor)?;
+
+        // Compute the challege blob if Message Integrity is present in the attrlist;
+        let challenge = match mipos {
+            Some(mipos) => {
+                let mut challenge = BytesMut::new();
+                let modlen = mipos + MI_ATTR_LENGTH; // Modified length of the challege
+                // Filling Stun Header
+                method.encode(&mut challenge)?;
+                modlen.encode(&mut challenge)?;
+                Cookie::encode(&mut challenge)?;
+                tid.encode(&mut challenge)?;
+                // Attrs till mi pos
+                challenge.extend_from_slice(&attrbytes[..mipos]);
+                Some(challenge.freeze())
+            }
+            _ => None,
+        };
+
+        Ok(Self {
+            method,
+            tid,
+            attrs,
+            challenge,
+            authenticated: false,
+            credential: None,
+            span: Self::get_span(method),
+        })
+    }
+}
+
+impl Encode for TurnMessage {
+    fn encode<B: BufMut>(&self, buffer: &mut B) -> Result<(), ProtoError> {
+        let mut attrbytes = BytesMut::new();
+        self.attrs.encode(&mut attrbytes)?;
+        let attrbytes = attrbytes.freeze();
+
+        self.method.encode(buffer)?;
+        attrbytes.len().encode(buffer)?;
+        Cookie::MAGIC.encode(buffer)?;
+        self.tid.encode(buffer)?;
+        buffer.put_slice(&attrbytes);
+
+        Ok(())
+    }
+}
+
+impl Into<StunMessage> for TurnMessage {
+    fn into(self) -> StunMessage {
+        StunMessage::Turn(self)
+    }
+}
