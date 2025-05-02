@@ -1,3 +1,4 @@
+use super::{ATTR_HEADER_LENGTH, Realm, error::TurnErrorCode, message::TranID, util};
 use crate::{
     coding::{CodingError, Decode, Encode},
     compute_padding,
@@ -6,8 +7,6 @@ use crate::{
 use anyhow::{Context, bail};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::net::SocketAddr;
-
-use super::{ATTR_HEADER_LENGTH, Realm, error::TurnErrorCode, message::TranID, util};
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 #[repr(u16)]
@@ -80,7 +79,7 @@ impl Encode for AKind {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct StunAttrs {
     inner: Vec<(AKind, Bytes)>,
 }
@@ -119,6 +118,38 @@ impl StunAttrs {
             Some(val) => *val = replace,
             None => self.inner.push(replace),
         }
+    }
+
+    pub fn get_string(&self, tid: &TranID) -> anyhow::Result<String> {
+        let mut res = String::new();
+        for (akind, bytes) in &self.inner {
+            let s: String = match akind {
+                AKind::Data => format!("Data - {} bytes", bytes.len()),
+                AKind::XorPeerAddress => format!("XorPeerAddr - {:?}", util::parse_xor_address(bytes.clone(), tid)?),
+                AKind::XorRelayAddress => format!("XorRelayADdr - {:?}", util::parse_xor_address(bytes.clone(), tid)?),
+                AKind::XorMappedAddress => format!("XorMappedAddr - {:?}", util::parse_xor_address(bytes.clone(), tid)?),
+                AKind::MappedAddress => format!("MappedAddr : {:?}", util::parse_address(bytes.clone())?),
+                AKind::Username => format!("Username - {:?}", String::from_utf8(bytes.to_vec())?),
+                AKind::MessageIntegrity => format!("MessageIntegrity - {{Redacted}}"),
+                AKind::ErrorCode => {
+                    let mut c = bytes.clone();
+                    let _ = c.get_u16();
+                    format!("ErrCode - {:?}", TurnErrorCode::try_from(&c)?)
+                }
+                AKind::ChannelNumber => format!("ChannelNumber - {}", bytes.clone().get_u16()),
+                AKind::Lifetime => format!("ChannelNumber - {}", bytes.clone().get_u32()),
+                AKind::Nonce => format!("Nonce - {:?}", String::from_utf8(bytes.to_vec())?),
+                AKind::Realm => format!("Realm - {:?}", String::from_utf8(bytes.to_vec())?),
+                AKind::Origin => format!("Realm - {:?}", String::from_utf8(bytes.to_vec())?),
+                AKind::RequestedTransport => format!("ReqTransport - {:?}", Transport::try_from(bytes.clone().get_u8())?),
+                AKind::Fingerprint => format!("Fingerprint : {}", bytes.clone().get_u32()),
+                AKind::Unknown(_) => format!("UnknownAttr"),
+            };
+
+            res = format!("{} {}", res, s);
+        }
+
+        Ok(res)
     }
 }
 

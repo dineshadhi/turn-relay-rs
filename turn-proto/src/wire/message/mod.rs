@@ -126,13 +126,11 @@ impl Encode for StunMessage {
 
 #[cfg(test)]
 mod test {
-
-    use bytes::BytesMut;
-
     use crate::wire::{
         attribute::{MessageIntegAttr, UsernameAttr, XorPeerAttr},
         method::MKind,
     };
+    use bytes::BytesMut;
 
     use super::*;
     const ALLOCATE_DUMP: &str = "000300882112a442415a4e555631705551464b77001900041100000000060044323a43543a313732393335383235323738303a3230303a39306438363634382d666637322d346162332d313732393335383235323737382d316335346333336264333565001400077274632e636f6d0000150010525256305859375847355462745a6c48000800143bb6ff776c115a45b2a8d9c378621ecd3c1cca62";
@@ -150,7 +148,10 @@ mod test {
                 // assert_eq!(alloc.clone().challenge.unwrap().to_vec(), challenge);
                 assert_eq!(alloc.method, Method::Allocate(MKind::Request));
                 assert!(alloc.is_attr::<UsernameAttr>());
-                assert_eq!(alloc.get_attr::<UsernameAttr>().unwrap(), "2:CT:1729358252780:200:90d86648-ff72-4ab3-1729358252778-1c54c33bd35e");
+                assert_eq!(
+                    alloc.get_attr::<UsernameAttr>().unwrap(),
+                    "2:CT:1729358252780:200:90d86648-ff72-4ab3-1729358252778-1c54c33bd35e"
+                );
                 assert!(!alloc.is_attr::<XorPeerAttr>());
                 assert!(alloc.is_attr::<MessageIntegAttr>());
             }

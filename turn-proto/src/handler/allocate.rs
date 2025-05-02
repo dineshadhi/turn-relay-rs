@@ -18,6 +18,7 @@ use std::net::SocketAddr;
 pub(crate) struct Allocate;
 
 impl Allocate {
+    #[instrument("Allocate::reject", skip_all)]
     pub fn reject(node: &mut TurnNode, code: TurnErrorCode, req: TurnMessage) {
         let mut res = req.extend(Method::Allocate(MKind::Error));
         res.set_attr::<ErrorCodeAttr>(code.clone());
@@ -27,6 +28,7 @@ impl Allocate {
         event!(Level::INFO, ?code, "Allocate Failed Rejected");
     }
 
+    #[instrument("Allocate::success", skip_all)]
     pub fn success(node: &mut TurnNode, relay_addr: SocketAddr, req: TurnMessage, lifetime: u32) -> Result<(), ProtoError> {
         let mut res = req.extend(Method::Allocate(MKind::Success));
         res.set_attr::<XorRelayAttr>(relay_addr);
@@ -44,12 +46,11 @@ impl Allocate {
     }
 
     pub fn process(node: &mut TurnNode, req: TurnMessage, relay_addr: Option<SocketAddr>) -> Result<(), ProtoError> {
-        if let Err(_) = is_attrs!(req, UsernameAttr, RealmAttr, NonceAttr,) {
+        if let Err(e) = is_attrs!(req, UsernameAttr, RealmAttr, NonceAttr,) {
+            tracing::error!("Missing Attribute : {:?}", e);
             Self::reject(node, TurnErrorCode::Unauthorized, req);
             return Ok(());
         }
-
-        tracing::info!("Alloc Resquest : {:?}", req.attrs);
 
         let nonce = req.get_attr::<NonceAttr>()?;
         let lifetime = req.get_attr::<LifeTimeAttr>().unwrap_or_else(|_| node.config.max_alloc_time);
@@ -60,8 +61,8 @@ impl Allocate {
             _ if node.get_nonce_string() != &nonce => Self::reject(node, TurnErrorCode::StaleNonce, req),
             _ if !req.is_authenticated() => node.authenticate(req)?,
             _ if relay_addr.is_none() => {
-                tracing::info!("Needs Allocation Requested");
-                node.add_event(NeedsAllocation(req))
+                tracing::info!("TurnEvent::NeedsAllocation");
+                node.add_event(NeedsAllocation(req));
             }
             _ => return Self::success(node, relay_addr.unwrap(), req, lifetime),
         }

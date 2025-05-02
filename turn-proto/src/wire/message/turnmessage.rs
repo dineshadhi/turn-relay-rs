@@ -1,12 +1,6 @@
-use std::sync::Arc;
-
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use ring::hmac::{self, HMAC_SHA1_FOR_LEGACY_USE_ONLY, Key, sign};
-use tracing::{
-    Level, Span,
-    field::{self},
-    span,
-};
+use tracing::{Level, Span, span};
 
 use crate::{
     coding::{Decode, Encode},
@@ -35,14 +29,14 @@ pub struct TurnMessage {
 impl TurnMessage {
     pub fn get_span(method: Method) -> Span {
         match method {
-            Method::Allocate(_) => span!(Level::INFO, "Allocate",),
+            Method::Allocate(_) => span!(Level::INFO, "Allocate"),
             Method::Permission(_) => span!(Level::INFO, "Permission"),
             Method::ChannelBind(_) => span!(Level::INFO, "ChannelBind"),
-            Method::Refresh(_) => span!(Level::INFO, "Refresh", lifetime = field::Empty),
+            Method::Refresh(_) => span!(Level::INFO, "Refresh"),
             Method::Stun(_) => span!(Level::INFO, "Stun"),
-            Method::SendIndication => span!(Level::INFO, "SendIndication"),
-            Method::DataIndication => span!(Level::INFO, "DataIndication"),
-            Method::ChannelData(_) => span!(Level::INFO, "ChannelData"),
+            Method::SendIndication => span!(Level::TRACE, "SendIndication"),
+            Method::DataIndication => span!(Level::TRACE, "DataIndication"),
+            Method::ChannelData(_) => span!(Level::TRACE, "ChannelData"),
             Method::UnknownMethod(_) => todo!(),
         }
     }
@@ -92,9 +86,8 @@ impl TurnMessage {
         self.authenticated
     }
 
-    pub fn in_scope<T, F: FnOnce() -> T>(&self, f: F) -> T {
-        let _e = self.span.enter();
-        f()
+    pub fn in_scope<F: FnOnce(Self) -> T, T>(self, f: F) -> T {
+        self.span.clone().in_scope(|| f(self))
     }
 
     pub fn authenticate(&mut self, password: &String) -> Result<(), ProtoError> {

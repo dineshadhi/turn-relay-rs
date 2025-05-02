@@ -17,7 +17,7 @@ pub enum TurnEvent {
     /// Needs Port Allocation. Implementation must provide a valid SocketAddr on TurnNode::alloc_addr()
     NeedsAllocation(TurnMessage),
     /// Checks if a permission is valid if the peer_addr is different from the relay_addr. Implementation must issue permission on TurnNode::issue_permission()
-    IssuePermission(TurnMessage),
+    NeedsPermission(TurnMessage),
     /// Request to relay the data to the session attached to the address allcoated to the peer
     RelayDataToPeer(SocketAddr, Bytes),
     /// Session is closed.
@@ -36,7 +36,7 @@ impl Debug for TurnEvent {
             TurnEvent::SendToClient(_) => "SendToClient",
             TurnEvent::NeedsAuth(_) => "NeedsAuth",
             TurnEvent::NeedsAllocation(_) => "NeedsAllocation",
-            TurnEvent::IssuePermission(_) => "IssuePermission",
+            TurnEvent::NeedsPermission(_) => "IssuePermission",
             TurnEvent::RelayDataToPeer(_, _) => "RelayDataToPeer",
             TurnEvent::Close(_) => "Close",
         };

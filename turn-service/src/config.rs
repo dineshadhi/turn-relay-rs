@@ -14,7 +14,7 @@ pub struct InstanceConfig {
     pub permission_max_time: u64,
     #[prop(key = "max_alloc_time", default = "300")]
     pub max_alloc_time: u32,
-    #[prop(key = "session_idle_time", default = "300")]
+    #[prop(key = "session_idle_time", default = "10")]
     pub session_idle_time: u64,
 }
 

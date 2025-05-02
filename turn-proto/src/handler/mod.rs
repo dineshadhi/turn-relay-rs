@@ -46,10 +46,7 @@ impl Handler {
 
     pub fn handle_stun_msg(node: &mut TurnNode, msg: StunMessage) -> Result<(), ProtoError> {
         match msg {
-            StunMessage::Turn(msg) => {
-                let span = msg.span.clone();
-                span.in_scope(|| Self::handle_turn_msg(node, msg))
-            }
+            StunMessage::Turn(msg) => msg.in_scope(|msg| Self::handle_turn_msg(node, msg)),
             StunMessage::Channel(msg) => ChannelData::process(node, msg),
         }
     }

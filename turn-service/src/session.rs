@@ -10,7 +10,7 @@ use futures_util::future::poll_fn;
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tracing::Span;
+use tracing::{Span, instrument};
 use turn_proto::{
     coding::Encode,
     error::ProtoError,
@@ -87,16 +87,17 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
         }
     }
 
+    #[instrument("Event::NeedsAuth", skip_all)]
     fn process_auth(&mut self, node: &mut TurnNode, req: TurnMessage) -> Result<(), SessionState> {
         let username = req.get_attr::<UsernameAttr>()?;
         match self.instance.service.get_password(&username) {
             Ok(password) => node.auth_msg(req, &password)?,
             Err(errcode) => node.reject_request(req, errcode)?,
         }
-
         Ok(())
     }
 
+    #[instrument("Event::NeedsAllocation", skip_all)]
     fn process_alloc(&mut self, node: &mut TurnNode, req: TurnMessage, parent: Span) -> Result<(), SessionState> {
         let username = req.get_attr::<UsernameAttr>()?;
         let port = match self.instance.allocator.allocate_port(&username) {
@@ -118,10 +119,14 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
         Ok(())
     }
 
+    #[instrument("Event::NeedsPermission", skip_all)]
     fn process_permission(&mut self, node: &mut TurnNode, req: TurnMessage) -> Result<(), SessionState> {
         let peer_addr = req.get_attr::<XorPeerAttr>()?;
         match self.instance.service.check_permission(peer_addr) {
-            Ok(_) => node.issue_permission(req)?,
+            Ok(_) => {
+                tracing::info!(?peer_addr, "Permission Issued");
+                node.issue_permission(req)?;
+            }
             Err(errcode) => node.reject_request(req, errcode)?,
         }
         Ok(())
@@ -170,21 +175,12 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
     async fn process_event(&mut self, node: &mut TurnNode, event: TurnEvent, parent: Span) -> Result<(), SessionState> {
         match event {
             TurnEvent::SendToClient(resp) => self.stream.write(resp.bytes()?).await?,
-            TurnEvent::NeedsAuth(req) => {
-                tracing::info!("Received : Needs Auth");
-                self.process_auth(node, req)?;
-            }
-            TurnEvent::NeedsAllocation(req) => {
-                tracing::info!("Received : Needs Allocation");
-                self.process_alloc(node, req, parent)?;
-            }
-            TurnEvent::IssuePermission(req) => {
-                tracing::info!("Received Issue Permission");
-                self.process_permission(node, req)?;
-            }
+            TurnEvent::NeedsAuth(req) => req.in_scope(|req| self.process_auth(node, req))?,
+            TurnEvent::NeedsAllocation(req) => req.in_scope(|req| self.process_alloc(node, req, parent))?,
+            TurnEvent::NeedsPermission(req) => req.in_scope(|req| self.process_permission(node, req))?,
             TurnEvent::RelayDataToPeer(peer_addr, data) => self.process_relay_data(peer_addr, data)?,
             TurnEvent::Close(closetype) => {
-                tracing::info!("Session Closed : {:?}", closetype);
+                tracing::info!(?closetype, "TurnEvent::Close");
                 return Err(SessionState::Disconnected)?;
             }
         }
@@ -214,7 +210,7 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
 
             if let Err(e) = state {
                 match e {
-                    SessionState::Disconnected => break tracing::info!("Disconnected"),
+                    SessionState::Disconnected => break,
                     SessionState::IdleTimeOut => break tracing::info!("Idle time out"),
                     SessionState::ProtoError(ProtoError::NeedMoreData) => {}
                     SessionState::ProtoError(perror) => tracing::error!("Proto Error - {:?}", perror),
@@ -222,8 +218,6 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
                 }
             }
         }
-
-        tracing::info!("Session Closed");
 
         if let (Some(username), Some(relay_addr)) = (self.username.as_ref(), self.relay_addr) {
             self.instance.allocator.surrender_port(&username, relay_addr.port());

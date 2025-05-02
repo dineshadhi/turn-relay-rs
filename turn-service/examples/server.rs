@@ -11,8 +11,13 @@ use turn_service::{
 pub struct CustomTurnService {}
 
 impl TurnService for CustomTurnService {
-    fn get_password(&self, _username: &str) -> Result<String, TurnErrorCode> {
-        Ok("test".into())
+    fn get_password(&self, username: &str) -> Result<String, TurnErrorCode> {
+        Ok(match username {
+            "dinesh" => "test",
+            "boose" => "dumeel",
+            _ => panic!("{}", username),
+        }
+        .into())
     }
 }
 
@@ -35,8 +40,9 @@ pub fn setup_tracing() -> anyhow::Result<()> {
     // This outputs the traces in the terminal
     let subscriber = tracing_subscriber::registry()
         .with(tracing_subscriber::filter::EnvFilter::from_default_env())
-        .with(tracing_subscriber::fmt::layer());
-    let subscriber = subscriber.with(tracing_opentelemetry::layer().with_tracer(tracer));
+        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_opentelemetry::layer().with_tracer(tracer));
+
     subscriber.init();
 
     Ok(())

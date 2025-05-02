@@ -1,3 +1,5 @@
+use tracing::instrument;
+
 use crate::{
     error::ProtoError,
     events::{SessionClose, TurnEvent},
@@ -15,6 +17,7 @@ use std::net::SocketAddr;
 pub(crate) struct ChannelBind;
 
 impl ChannelBind {
+    #[instrument("ChannelBind::reject", skip_all)]
     pub fn reject(node: &mut TurnNode, code: TurnErrorCode, req: TurnMessage) {
         let mut res = req.extend(Method::ChannelBind(MKind::Error));
         res.set_attr::<ErrorCodeAttr>(code.clone());
@@ -26,6 +29,7 @@ impl ChannelBind {
         node.add_event(TurnEvent::SendToClient(res.into()));
     }
 
+    #[instrument("ChannelBind::success", skip_all)]
     pub fn success(node: &mut TurnNode, req: TurnMessage, peer_addr: SocketAddr, channel: u16) -> Result<(), ProtoError> {
         node.bind_channel(peer_addr, channel);
 

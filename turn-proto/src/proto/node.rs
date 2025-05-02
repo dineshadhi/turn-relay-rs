@@ -144,13 +144,13 @@ impl TurnNode {
         match &self.password {
             Some(password) => match msg.authenticate(password) {
                 Ok(_) => {
-                    tracing::info!("Authenticated Succesfully");
+                    tracing::info!("Auth Success");
                     Handler::handle_turn_msg(self, msg) // Process the req again, if auth is a succcess.
                 }
                 Err(_) => Handler::reject_msg(self, msg, TurnErrorCode::WrongCredentials), // Otherwise reject it
             },
             None => {
-                tracing::info!("Auth Requested");
+                tracing::info!("TurnEvent::NeedsAuth");
                 return Ok(self.add_event(TurnEvent::NeedsAuth(msg))); // Send NeedsAuth, if there is no cache
             }
         }
@@ -161,10 +161,11 @@ impl TurnNode {
         match event {
             InputEvent::NetworkBytes(data) => {
                 self.buffer.extend_from_slice(data.chunk());
-                loop {
+                while self.buffer.has_remaining() {
                     let msg = self.decode_stunmsg()?;
                     Handler::handle_stun_msg(self, msg)?;
                 }
+                Ok(())
             }
             InputEvent::DataFromPeer(peer_addr, data) => Handler::handle_data_from_peer(self, peer_addr, data),
         }
@@ -197,6 +198,7 @@ impl TurnNode {
 
     pub fn alloc_addr(&mut self, relay_addr: SocketAddr, msg: TurnMessage) -> Result<(), ProtoError> {
         let _e = msg.span.clone().entered();
+        tracing::info!(?relay_addr, "Address Allocated");
         match matches!(msg.method, Method::Allocate(MKind::Request)) {
             true => Allocate::process(self, msg, Some(relay_addr))?,
             false => tracing::error!("alloc_addr : Invalid TurnMessage Passed {:?}", msg.method),
@@ -245,6 +247,6 @@ mod test {
             ProtoError::NeedMoreData
         );
         sm.drive_forward(InputEvent::NetworkBytes(Bytes::copy_from_slice(&allocate[20..])))
-            .unwrap();
+            .unwrap()
     }
 }

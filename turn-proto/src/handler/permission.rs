@@ -11,10 +11,12 @@ use crate::{
     },
 };
 use std::net::SocketAddr;
+use tracing::instrument;
 
 pub(crate) struct Permission;
 
 impl Permission {
+    #[instrument("Permission::reject", skip_all)]
     pub fn reject(node: &mut TurnNode, code: TurnErrorCode, req: TurnMessage) {
         tracing::error!(?code, "Create Permission Failed");
 
@@ -26,6 +28,7 @@ impl Permission {
         node.add_event(TurnEvent::SendToClient(res.into()));
     }
 
+    #[instrument("Permission::success", skip_all)]
     fn success(node: &mut TurnNode, req: TurnMessage, _peer_addr: SocketAddr) -> Result<(), ProtoError> {
         let peer_addr = req.get_attr::<XorPeerAttr>()?;
         node.add_peer(peer_addr);
@@ -57,8 +60,8 @@ impl Permission {
             _ if node.get_nonce_string() != &nonce => Self::reject(node, TurnErrorCode::StaleNonce, req),
             _ if !req.is_authenticated() => node.authenticate(req)?,
             _ if !node.is_permission_issued(&peer_addr) => {
-                tracing::info!("Requesting Permission : {}", peer_addr);
-                node.add_event(TurnEvent::IssuePermission(req));
+                tracing::info!(?peer_addr, "TurnEvent:NeedsPermission");
+                node.add_event(TurnEvent::NeedsPermission(req));
             }
             _ => return Self::success(node, req, peer_addr),
         }
