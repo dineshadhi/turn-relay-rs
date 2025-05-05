@@ -37,7 +37,7 @@ impl TurnMessage {
             Method::SendIndication => span!(Level::TRACE, "SendIndication"),
             Method::DataIndication => span!(Level::TRACE, "DataIndication"),
             Method::ChannelData(_) => span!(Level::TRACE, "ChannelData"),
-            Method::UnknownMethod(_) => todo!(),
+            Method::Unknown(_) => todo!(),
         }
     }
     pub fn new(method: Method, tid: TranID) -> Self {
@@ -90,11 +90,11 @@ impl TurnMessage {
         self.span.clone().in_scope(|| f(self))
     }
 
-    pub fn authenticate(&mut self, password: &String) -> Result<(), ProtoError> {
+    pub fn authenticate(&mut self, password: &str) -> Result<(), ProtoError> {
         let credential = match &self.credential {
             Some(cred) => cred.to_owned(),
             None => self
-                .compute_credential(&password)
+                .compute_credential(password)
                 .map_err(|e| ProtoError::MessageIntegrityFailed(format!("{}", e)))?,
         };
 
@@ -118,10 +118,10 @@ impl TurnMessage {
         Err(ProtoError::MessageIntegrityFailed("MI Check Failed".into()))
     }
 
-    pub(crate) fn compute_credential(&mut self, password: &String) -> anyhow::Result<Vec<u8>> {
+    pub(crate) fn compute_credential(&mut self, password: &str) -> anyhow::Result<Vec<u8>> {
         let turnusername = self.get_attr::<UsernameAttr>()?;
         let realm = self.get_attr::<RealmAttr>()?;
-        let credential = turnusername + ":" + &realm + ":" + &password;
+        let credential = turnusername + ":" + &realm + ":" + password;
         let credential = md5::compute(credential).to_vec();
         self.credential = Some(credential.clone());
         Ok(credential)
@@ -217,8 +217,8 @@ impl Encode for TurnMessage {
     }
 }
 
-impl Into<StunMessage> for TurnMessage {
-    fn into(self) -> StunMessage {
-        StunMessage::Turn(self)
+impl From<TurnMessage> for StunMessage {
+    fn from(val: TurnMessage) -> Self {
+        StunMessage::Turn(val)
     }
 }

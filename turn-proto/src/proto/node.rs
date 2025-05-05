@@ -90,8 +90,7 @@ impl TurnNode {
     pub(crate) fn is_peer(&mut self, peer_addr: &SocketAddr) -> bool {
         self.peers
             .iter()
-            .find(|((addr, _), at)| addr == peer_addr && !is_expired!(**at, self.config.permission_max_time))
-            .is_some()
+            .any(|((addr, _), at)| addr == peer_addr && !is_expired!(*at, self.config.permission_max_time))
     }
 
     pub(crate) fn bind_channel(&mut self, peer_addr: SocketAddr, channel: u16) {
@@ -151,7 +150,8 @@ impl TurnNode {
             },
             None => {
                 tracing::info!("TurnEvent::NeedsAuth");
-                return Ok(self.add_event(TurnEvent::NeedsAuth(msg))); // Send NeedsAuth, if there is no cache
+                self.add_event(TurnEvent::NeedsAuth(msg)); // Send NeedsAuth, if there is no cache
+                Ok(())
             }
         }
     }
@@ -179,12 +179,12 @@ impl TurnNode {
         }
     }
 
-    pub fn auth_msg(&mut self, mut msg: TurnMessage, password: &String) -> Result<(), ProtoError> {
+    pub fn auth_msg(&mut self, mut msg: TurnMessage, password: &str) -> Result<(), ProtoError> {
         let _e = msg.span.clone().entered();
         match msg.authenticate(password) {
             Ok(_) => {
                 tracing::info!("auth_msg : Authenticated Succesfully");
-                self.password = Some(password.clone()); // Cache the password
+                self.password = Some(password.to_string()); // Cache the password
                 Handler::handle_turn_msg(self, msg)
             }
             Err(_) => Handler::reject_msg(self, msg, TurnErrorCode::WrongCredentials),

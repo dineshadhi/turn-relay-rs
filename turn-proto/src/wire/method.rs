@@ -25,22 +25,19 @@ pub enum Method {
     SendIndication,
     DataIndication,
     ChannelData(u16),
-    UnknownMethod(u16),
+    Unknown(u16),
     // Send, Data - Not Supported
 }
 
 impl Method {
     pub(crate) fn is_unknown(&self) -> bool {
-        match self {
-            Method::UnknownMethod(_) => true,
-            _ => false,
-        }
+        matches!(self, Method::Unknown(_))
     }
 
     // Reads the method without advancing the buffer
     pub(crate) fn peek(buffer: &[u8]) -> Result<Self, ProtoError> {
         match buffer.remaining() < 2 {
-            true => return Err(ProtoError::NeedMoreData)?,
+            true => Err(ProtoError::NeedMoreData)?,
             false => Ok(u16::from_be_bytes(buffer.chunk()[..2].try_into().unwrap()).try_into()?),
         }
     }
@@ -59,7 +56,7 @@ impl TryFrom<u16> for Method {
             0x0016 => Self::SendIndication,
             0x0017 => Self::DataIndication,
             x if (MIN_CHANNEL_NUMBER..MAX_CHANNEL_NUM).contains(&x) => Self::ChannelData(x),
-            x => Method::UnknownMethod(x),
+            x => Method::Unknown(x),
         })
     }
 }
@@ -73,7 +70,8 @@ impl Decode for Method {
 
 impl Encode for Method {
     fn encode<B: BufMut>(&self, buffer: &mut B) -> Result<(), ProtoError> {
-        Ok(buffer.put_u16(u16::from(*self)))
+        buffer.put_u16(u16::from(*self));
+        Ok(())
     }
 }
 
@@ -108,7 +106,7 @@ impl From<Method> for u16 {
             Method::SendIndication => 0x0016,
             Method::DataIndication => 0x0017,
             Method::ChannelData(x) => x,
-            Method::UnknownMethod(x) => x,
+            Method::Unknown(x) => x,
         }
     }
 }

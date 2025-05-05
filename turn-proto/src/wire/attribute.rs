@@ -107,12 +107,12 @@ impl StunAttrs {
             .ok_or(CodingError::AttrNotFound)
             .context("get_attr failed for {akind}")?;
 
-        T::try_from(bytes.clone(), &tid)
+        T::try_from(bytes.clone(), tid)
     }
 
     pub fn set_attr<T: AttributeTrait>(&mut self, data: T::Inner, tid: &TranID) {
         let found = self.inner.iter_mut().find(|(akind, _)| *akind == T::akind());
-        let replace = (T::akind(), T::into(data, &tid));
+        let replace = (T::akind(), T::into(data, tid));
 
         match found {
             Some(val) => *val = replace,
@@ -130,7 +130,7 @@ impl StunAttrs {
                 AKind::XorMappedAddress => format!("XorMappedAddr - {:?}", util::parse_xor_address(bytes.clone(), tid)?),
                 AKind::MappedAddress => format!("MappedAddr : {:?}", util::parse_address(bytes.clone())?),
                 AKind::Username => format!("Username - {:?}", String::from_utf8(bytes.to_vec())?),
-                AKind::MessageIntegrity => format!("MessageIntegrity - {{Redacted}}"),
+                AKind::MessageIntegrity => "MessageIntegrity - {Redacted}".to_string(),
                 AKind::ErrorCode => {
                     let mut c = bytes.clone();
                     let _ = c.get_u16();
@@ -143,7 +143,7 @@ impl StunAttrs {
                 AKind::Origin => format!("Realm - {:?}", String::from_utf8(bytes.to_vec())?),
                 AKind::RequestedTransport => format!("ReqTransport - {:?}", Transport::try_from(bytes.clone().get_u8())?),
                 AKind::Fingerprint => format!("Fingerprint : {}", bytes.clone().get_u32()),
-                AKind::Unknown(_) => format!("UnknownAttr"),
+                AKind::Unknown(_) => "UnknownAttr".to_string(),
             };
 
             res = format!("{} {}", res, s);
@@ -248,7 +248,7 @@ impl AttributeTrait for XorPeerAttr {
     }
 
     fn try_from(buffer: Bytes, tid: &Bytes) -> anyhow::Result<Self::Inner> {
-        util::parse_xor_address(buffer, &tid)
+        util::parse_xor_address(buffer, tid)
     }
 
     fn into(attr: Self::Inner, tid: &Bytes) -> Bytes {

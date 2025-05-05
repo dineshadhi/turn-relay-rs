@@ -107,7 +107,7 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
 
         let alloc_addr: SocketAddr = format!("{}:{}", self.instance.config.server_addr, port).parse().unwrap();
 
-        self.relay_addr = Some(alloc_addr.clone());
+        self.relay_addr = Some(alloc_addr);
         self.username = Some(username.clone());
 
         parent.record("username", username);
@@ -220,7 +220,7 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
         }
 
         if let (Some(username), Some(relay_addr)) = (self.username.as_ref(), self.relay_addr) {
-            self.instance.allocator.surrender_port(&username, relay_addr.port());
+            self.instance.allocator.surrender_port(username, relay_addr.port());
         }
 
         Ok(())

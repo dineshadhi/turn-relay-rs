@@ -43,7 +43,7 @@ impl Nonce {
         if is_expired!(self.created_at, expire_time) {
             self.inner = util::generate_nonce();
         }
-        return &self.inner;
+        &self.inner
     }
 }
 

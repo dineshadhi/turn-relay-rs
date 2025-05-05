@@ -37,7 +37,7 @@ pub fn parse_xor_address(data: Bytes, tid: &Bytes) -> anyhow::Result<SocketAddr>
 
             let mut mask = [0u8; 16];
             mask[..4].copy_from_slice(&MAGIC_COOKIE.to_be_bytes());
-            mask[4..16].copy_from_slice(&tid);
+            mask[4..16].copy_from_slice(tid);
 
             let ip = buffer.get_u128() ^ u128::from_be_bytes(mask);
 
@@ -69,7 +69,7 @@ pub fn bytes_xor_address(addr: SocketAddr, tid: &Bytes) -> Bytes {
 
             let mut mask = [0u8; 16];
             mask[..4].copy_from_slice(&MAGIC_COOKIE.to_be_bytes());
-            mask[4..16].copy_from_slice(&tid);
+            mask[4..16].copy_from_slice(tid);
 
             let ip = u128::from_be_bytes(ipv6.ip().octets()) ^ u128::from_be_bytes(mask);
 

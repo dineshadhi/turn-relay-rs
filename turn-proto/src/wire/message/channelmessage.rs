@@ -51,14 +51,14 @@ impl Encode for ChannelMessage {
         Method::ChannelData(self.channel).encode(buffer)?;
         let chunk = self.data.chunk();
         chunk.len().encode(buffer)?;
-        buffer.put_slice(&chunk);
+        buffer.put_slice(chunk);
         buffer.put_bytes(0x00, compute_padding!(chunk.len()));
         Ok(())
     }
 }
 
-impl Into<StunMessage> for ChannelMessage {
-    fn into(self) -> StunMessage {
-        StunMessage::Channel(self)
+impl From<ChannelMessage> for StunMessage {
+    fn from(val: ChannelMessage) -> Self {
+        StunMessage::Channel(val)
     }
 }

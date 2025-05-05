@@ -11,6 +11,12 @@ pub struct RandomPortAllocator {
     inner: Mutex<Vec<u16>>,
 }
 
+impl Default for RandomPortAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RandomPortAllocator {
     pub fn new() -> Self {
         RandomPortAllocator {

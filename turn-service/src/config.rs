@@ -18,12 +18,12 @@ pub struct InstanceConfig {
     pub session_idle_time: u64,
 }
 
-impl Into<ProtoConfig> for InstanceConfig {
-    fn into(self) -> ProtoConfig {
+impl From<InstanceConfig> for ProtoConfig {
+    fn from(val: InstanceConfig) -> Self {
         ProtoConfig {
-            max_alloc_time: self.max_alloc_time,
-            permission_max_time: self.permission_max_time,
-            nonce_max_time: self.nonce_max_time,
+            max_alloc_time: val.max_alloc_time,
+            permission_max_time: val.permission_max_time,
+            nonce_max_time: val.nonce_max_time,
         }
     }
 }

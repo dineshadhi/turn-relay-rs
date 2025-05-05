@@ -24,7 +24,10 @@ pub struct TranID(Bytes);
 
 impl std::fmt::Debug for TranID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let hex_string: String = self.0.iter().map(|b| format!("{:02x}", b)).collect();
+        let hex_string = self.0.iter().fold(String::new(), |mut str, val| {
+            str = str + &format!("{:02x}", val);
+            str
+        });
         write!(f, "{}", hex_string)
     }
 }

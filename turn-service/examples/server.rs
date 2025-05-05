@@ -48,6 +48,20 @@ pub fn setup_tracing() -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn setup_metrics() -> anyhow::Result<()> {
+    let resource = opentelemetry_sdk::Resource::builder().with_service_name("turn-rs").build();
+    let exporter = opentelemetry_otlp::MetricExporter::builder().with_tonic().build()?;
+    let provider = opentelemetry_sdk::metrics::SdkMeterProvider::builder()
+        .with_resource(resource)
+        .with_periodic_exporter(exporter)
+        .build();
+
+    global::set_meter_provider(provider.clone());
+
+    // let p = global::meter("zvpturn-rs");
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     setup_tracing().unwrap();
@@ -60,5 +74,6 @@ async fn main() -> anyhow::Result<()> {
     let app = AppBuilder::builder(config).with_udp(vec![3000]).with_tcp(vec![3000]).build().await;
     app.run(service);
 
-    Ok(tokio::signal::ctrl_c().await.unwrap())
+    tokio::signal::ctrl_c().await.unwrap();
+    Ok(())
 }
