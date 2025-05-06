@@ -16,6 +16,8 @@ pub struct InstanceConfig {
     pub max_alloc_time: u32,
     #[prop(key = "session_idle_time", default = "10")]
     pub session_idle_time: u64,
+    #[prop(key = "realm", default = "turn-rs")]
+    pub realm: String,
 }
 
 impl From<InstanceConfig> for ProtoConfig {
@@ -24,6 +26,7 @@ impl From<InstanceConfig> for ProtoConfig {
             max_alloc_time: val.max_alloc_time,
             permission_max_time: val.permission_max_time,
             nonce_max_time: val.nonce_max_time,
+            realm: val.realm,
         }
     }
 }

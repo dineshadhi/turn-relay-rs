@@ -12,12 +12,11 @@ pub struct CustomTurnService {}
 
 impl TurnService for CustomTurnService {
     fn get_password(&self, username: &str) -> Result<String, TurnErrorCode> {
-        Ok(match username {
-            "dinesh" => "test",
-            "boose" => "dumeel",
+        match username {
+            "dinesh" => Ok("test".into()),
+            "boose" => Ok("dumeel".into()),
             _ => panic!("{}", username),
         }
-        .into())
     }
 }
 
@@ -58,13 +57,13 @@ pub fn setup_metrics() -> anyhow::Result<()> {
 
     global::set_meter_provider(provider.clone());
 
-    // let p = global::meter("zvpturn-rs");
     Ok(())
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     setup_tracing().unwrap();
+    setup_metrics().unwrap();
 
     let service = CustomTurnService {};
     let mut hm = HashMap::new();

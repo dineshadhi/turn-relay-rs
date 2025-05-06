@@ -92,30 +92,31 @@ impl TurnMessage {
 
     pub fn authenticate(&mut self, password: &str) -> Result<(), ProtoError> {
         let credential = match &self.credential {
-            Some(cred) => cred.to_owned(),
-            None => self
+            Some(cred) => cred,
+            None => &self
                 .compute_credential(password)
                 .map_err(|e| ProtoError::MessageIntegrityFailed(format!("{}", e)))?,
         };
 
         let challenge = match &self.challenge {
-            Some(c) => c.to_owned(),
+            Some(challenge) => challenge,
             None => return Err(ProtoError::MessageIntegrityFailed("No challenge blob".into())),
         };
 
-        let key = hmac::Key::new(HMAC_SHA1_FOR_LEGACY_USE_ONLY, &credential);
-        let tag = sign(&key, &challenge);
+        let key = hmac::Key::new(HMAC_SHA1_FOR_LEGACY_USE_ONLY, credential);
+        let tag = sign(&key, challenge);
 
-        let integbyes = self
+        let integbytes = self
             .get_attr::<MessageIntegAttr>()
             .map_err(|e| ProtoError::MessageIntegrityFailed(format!("{}", e)))?;
 
-        if tag.as_ref() == integbyes {
-            self.authenticated = true;
-            return Ok(());
+        match () {
+            _ if tag.as_ref() == integbytes => {
+                self.authenticated = true;
+                Ok(())
+            }
+            _ => Err(ProtoError::MessageIntegrityFailed("MI Check Failed".into())),
         }
-
-        Err(ProtoError::MessageIntegrityFailed("MI Check Failed".into()))
     }
 
     pub(crate) fn compute_credential(&mut self, password: &str) -> anyhow::Result<Vec<u8>> {
@@ -129,23 +130,21 @@ impl TurnMessage {
 
     pub(crate) fn compute_integrity(&self) -> Result<Bytes, ProtoError> {
         let credential = match &self.credential {
-            Some(cred) => cred.to_owned(),
-            None => {
-                return Err(ProtoError::MessageIntegrityFailed("Compute Integrity Failed : Missing Credential".into()));
-            }
+            Some(cred) => cred,
+            None => return Err(ProtoError::MessageIntegrityFailed("Compute Integrity Failed : Missing Credential".into())),
         };
 
         let mut buffer = Vec::new();
         self.encode(&mut buffer)?;
 
         let attrlen = buffer.len() - STUN_HEADER_LEN; // Length of the attributes
-        let modlen: u16 = (attrlen + MI_ATTR_LENGTH) as u16; // Adding additional lenght for MI Attr
+        let modlen: u16 = (attrlen + MI_ATTR_LENGTH) as u16; // Adding additional length for MI Attr that will be added after computing integrity
 
         let modlenbytes = modlen.to_be_bytes();
         buffer[2] = modlenbytes[0];
         buffer[3] = modlenbytes[1];
 
-        let key = Key::new(HMAC_SHA1_FOR_LEGACY_USE_ONLY, &credential);
+        let key = Key::new(HMAC_SHA1_FOR_LEGACY_USE_ONLY, credential);
         let tag = sign(&key, &buffer);
 
         Ok(Bytes::copy_from_slice(tag.as_ref()))
@@ -176,7 +175,7 @@ impl Decode for TurnMessage {
         let challenge = match mipos {
             Some(mipos) => {
                 let mut challenge = BytesMut::new();
-                let modlen = mipos + MI_ATTR_LENGTH; // Modified length of the challege
+                let modlen = mipos + MI_ATTR_LENGTH; // Modified length of the challege. Only the length till the MIAttr and ignore all attrs after it.1
                 // Filling Stun Header
                 method.encode(&mut challenge)?;
                 modlen.encode(&mut challenge)?;

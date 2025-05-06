@@ -5,7 +5,7 @@ use crate::{
     events::{InputEvent, TurnEvent},
     handler::{Handler, allocate::Allocate, permission::Permission},
     wire::{
-        Nonce, Realm,
+        Nonce,
         attribute::XorPeerAttr,
         error::TurnErrorCode,
         message::{StunMessage, TurnMessage},
@@ -34,7 +34,7 @@ pub struct TurnNode {
     // Remote client address
     pub(crate) remote: SocketAddr,
     // Realm set by the app
-    pub(crate) realm: Realm,
+    pub(crate) realm: String,
     // Config set by the app
     pub(crate) config: Arc<ProtoConfig>,
     // Address that was allocated to this node.
@@ -60,7 +60,7 @@ impl TurnNode {
             permitted_peers: Default::default(),
             relay_addr: None,
             nonce: Nonce::default(),
-            realm: Realm::default(),
+            realm: config.realm.clone(),
             event_queue: Default::default(),
             peers: HashMap::default(),
             password: None,
@@ -219,11 +219,11 @@ impl TurnNode {
         Ok(())
     }
 
-    pub fn is_permission_issued(&self, peer_addr: &SocketAddr) -> bool {
+    pub(crate) fn is_permission_issued(&self, peer_addr: &SocketAddr) -> bool {
         self.permitted_peers.contains(peer_addr)
     }
 
-    pub fn set_realm(&mut self, realm: Realm) {
+    pub fn set_realm(&mut self, realm: String) {
         self.realm = realm;
     }
 }

@@ -1,4 +1,4 @@
-use std::{ops::Deref, time::Instant};
+use std::time::Instant;
 
 use crate::is_expired;
 
@@ -10,18 +10,6 @@ pub(crate) mod util;
 
 #[derive(Debug, Clone)]
 pub struct Realm(pub String);
-
-impl Default for Realm {
-    fn default() -> Self {
-        Realm(String::from("turn-rs"))
-    }
-}
-
-impl Realm {
-    pub fn new(val: &str) -> Self {
-        Realm(val.into())
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct Nonce {
@@ -41,22 +29,20 @@ impl Default for Nonce {
 impl Nonce {
     pub fn get(&mut self, expire_time: u64) -> &String {
         if is_expired!(self.created_at, expire_time) {
-            self.inner = util::generate_nonce();
+            self.refresh();
         }
         &self.inner
+    }
+
+    pub fn refresh(&mut self) {
+        self.inner = util::generate_nonce();
+        self.created_at = Instant::now();
     }
 }
 
 impl From<String> for Realm {
     fn from(value: String) -> Self {
         Realm(value)
-    }
-}
-
-impl Deref for Realm {
-    type Target = String;
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }
 

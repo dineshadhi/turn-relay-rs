@@ -1,5 +1,3 @@
-use tracing::{Level, event, instrument};
-
 use crate::{
     error::ProtoError,
     events::TurnEvent::{NeedsAllocation, SendToClient},
@@ -13,6 +11,7 @@ use crate::{
     },
 };
 use std::net::SocketAddr;
+use tracing::{Level, event, instrument};
 
 #[derive(Debug)]
 pub(crate) struct Allocate;

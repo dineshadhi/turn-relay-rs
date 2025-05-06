@@ -1,4 +1,4 @@
-use super::{ATTR_HEADER_LENGTH, Realm, error::TurnErrorCode, message::TranID, util};
+use super::{ATTR_HEADER_LENGTH, error::TurnErrorCode, message::TranID, util};
 use crate::{
     coding::{CodingError, Decode, Encode},
     compute_padding,
@@ -100,19 +100,17 @@ impl StunAttrs {
     }
 
     pub fn get_attr<T: AttributeTrait>(&self, tid: &TranID) -> anyhow::Result<T::Inner> {
-        let (_, bytes) = self
-            .inner
+        self.inner
             .iter()
             .find(|(akind, _)| akind == &T::akind())
+            .map(|(_, bytes)| T::decode(bytes.clone(), tid))
             .ok_or(CodingError::AttrNotFound)
-            .context("get_attr failed for {akind}")?;
-
-        T::try_from(bytes.clone(), tid)
+            .context("get_attr failed for {akind}")?
     }
 
     pub fn set_attr<T: AttributeTrait>(&mut self, data: T::Inner, tid: &TranID) {
         let found = self.inner.iter_mut().find(|(akind, _)| *akind == T::akind());
-        let replace = (T::akind(), T::into(data, tid));
+        let replace = (T::akind(), T::encode(data, tid));
 
         match found {
             Some(val) => *val = replace,
@@ -125,24 +123,20 @@ impl StunAttrs {
         for (akind, bytes) in &self.inner {
             let s: String = match akind {
                 AKind::Data => format!("Data - {} bytes", bytes.len()),
-                AKind::XorPeerAddress => format!("XorPeerAddr - {:?}", util::parse_xor_address(bytes.clone(), tid)?),
-                AKind::XorRelayAddress => format!("XorRelayADdr - {:?}", util::parse_xor_address(bytes.clone(), tid)?),
-                AKind::XorMappedAddress => format!("XorMappedAddr - {:?}", util::parse_xor_address(bytes.clone(), tid)?),
-                AKind::MappedAddress => format!("MappedAddr : {:?}", util::parse_address(bytes.clone())?),
-                AKind::Username => format!("Username - {:?}", String::from_utf8(bytes.to_vec())?),
+                AKind::XorPeerAddress => format!("XorPeerAddr - {:?}", XorPeerAttr::decode(bytes.to_owned(), tid)?),
+                AKind::XorRelayAddress => format!("XorRelayADdr - {:?}", XorRelayAttr::decode(bytes.to_owned(), tid)?),
+                AKind::XorMappedAddress => format!("XorMappedAddr - {:?}", XorMappedAttr::decode(bytes.to_owned(), tid)?),
+                AKind::MappedAddress => format!("MappedAddr : {:?}", MappedAttr::decode(bytes.to_owned(), tid)?),
+                AKind::Username => format!("Username - {:?}", UsernameAttr::decode(bytes.to_owned(), tid)?),
                 AKind::MessageIntegrity => "MessageIntegrity - {Redacted}".to_string(),
-                AKind::ErrorCode => {
-                    let mut c = bytes.clone();
-                    let _ = c.get_u16();
-                    format!("ErrCode - {:?}", TurnErrorCode::try_from(&c)?)
-                }
-                AKind::ChannelNumber => format!("ChannelNumber - {}", bytes.clone().get_u16()),
-                AKind::Lifetime => format!("ChannelNumber - {}", bytes.clone().get_u32()),
-                AKind::Nonce => format!("Nonce - {:?}", String::from_utf8(bytes.to_vec())?),
-                AKind::Realm => format!("Realm - {:?}", String::from_utf8(bytes.to_vec())?),
-                AKind::Origin => format!("Realm - {:?}", String::from_utf8(bytes.to_vec())?),
-                AKind::RequestedTransport => format!("ReqTransport - {:?}", Transport::try_from(bytes.clone().get_u8())?),
-                AKind::Fingerprint => format!("Fingerprint : {}", bytes.clone().get_u32()),
+                AKind::ErrorCode => format!("ErrCode - {:?}", ErrorCodeAttr::decode(bytes.to_owned(), tid)?),
+                AKind::ChannelNumber => format!("ChannelNumber - {}", ChannelNumberAttr::decode(bytes.to_owned(), tid)?),
+                AKind::Lifetime => format!("ChannelNumber - {}", LifeTimeAttr::decode(bytes.to_owned(), tid)?),
+                AKind::Nonce => format!("Nonce - {:?}", NonceAttr::decode(bytes.to_owned(), tid)?),
+                AKind::Realm => format!("Realm - {:?}", RealmAttr::decode(bytes.to_owned(), tid)?),
+                AKind::Origin => format!("Realm - {:?}", OriginAttr::decode(bytes.to_owned(), tid)?),
+                AKind::RequestedTransport => format!("ReqTransport - {:?}", ReqTransportAttr::decode(bytes.to_owned(), tid)?),
+                AKind::Fingerprint => format!("Fingerprint : {}", FingerprintAttr::decode(bytes.to_owned(), tid)?),
                 AKind::Unknown(_) => "UnknownAttr".to_string(),
             };
 
@@ -155,28 +149,26 @@ impl StunAttrs {
 
 impl Decode for StunAttrs {
     type Output = (Self, Option<usize>);
+    // Returns the StunAttrs and also the starting index of the MI Attribute.
     fn decode<B: Buf>(buffer: &mut B) -> Result<Self::Output, ProtoError> {
         let mut inner = Vec::new();
-        let mut mipos: Option<usize> = None;
+        let mut mipos: Option<usize> = None; // Index position of the MI Attribute to be recorded
         let mut currpos: usize = 0;
 
         while buffer.has_remaining() {
             let akind = AKind::decode(buffer)?;
             let alen = usize::decode(buffer)?;
+            let padding = compute_padding!(alen);
 
             match () {
                 _ if buffer.remaining() < alen => return Err(ProtoError::NeedMoreData),
-                _ if akind == AKind::MessageIntegrity => mipos = Some(currpos),
+                _ if akind == AKind::MessageIntegrity => mipos = Some(currpos), // Recording the MI Attr position
                 _ => (),
             }
 
             inner.push((akind, buffer.copy_to_bytes(alen)));
-
-            // Advance the buffer to adjust for padding
-            let padding = compute_padding!(alen);
-            buffer.advance(padding);
-            // Compute the position accordingly to track the position of MIAttr
-            currpos += ATTR_HEADER_LENGTH + alen + padding;
+            buffer.advance(padding); // Advance the buffer to adjust for padding
+            currpos += ATTR_HEADER_LENGTH + alen + padding; // Compute the position accordingly to track the position of MIAttr
         }
 
         Ok((Self { inner }, mipos))
@@ -218,8 +210,8 @@ pub trait AttributeTrait {
     type Inner;
 
     fn akind() -> AKind;
-    fn try_from(buffer: Bytes, tid: &Bytes) -> anyhow::Result<Self::Inner>;
-    fn into(attr: Self::Inner, tid: &Bytes) -> Bytes;
+    fn decode(buffer: Bytes, tid: &TranID) -> anyhow::Result<Self::Inner>;
+    fn encode(attr: Self::Inner, tid: &TranID) -> Bytes;
 }
 
 pub struct DataAttr;
@@ -230,11 +222,11 @@ impl AttributeTrait for DataAttr {
         AKind::Data
     }
 
-    fn try_from(buffer: Bytes, _: &Bytes) -> anyhow::Result<Self::Inner> {
+    fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
         Ok(buffer)
     }
 
-    fn into(attr: Self::Inner, _: &Bytes) -> Bytes {
+    fn encode(attr: Self::Inner, _: &TranID) -> Bytes {
         attr
     }
 }
@@ -247,11 +239,11 @@ impl AttributeTrait for XorPeerAttr {
         AKind::XorPeerAddress
     }
 
-    fn try_from(buffer: Bytes, tid: &Bytes) -> anyhow::Result<Self::Inner> {
+    fn decode(buffer: Bytes, tid: &TranID) -> anyhow::Result<Self::Inner> {
         util::parse_xor_address(buffer, tid)
     }
 
-    fn into(attr: Self::Inner, tid: &Bytes) -> Bytes {
+    fn encode(attr: Self::Inner, tid: &TranID) -> Bytes {
         util::bytes_xor_address(attr, tid)
     }
 }
@@ -264,11 +256,11 @@ impl AttributeTrait for XorRelayAttr {
         AKind::XorRelayAddress
     }
 
-    fn try_from(buffer: Bytes, tid: &Bytes) -> anyhow::Result<Self::Inner> {
+    fn decode(buffer: Bytes, tid: &TranID) -> anyhow::Result<Self::Inner> {
         util::parse_xor_address(buffer, tid)
     }
 
-    fn into(attr: Self::Inner, tid: &Bytes) -> Bytes {
+    fn encode(attr: Self::Inner, tid: &TranID) -> Bytes {
         util::bytes_xor_address(attr, tid)
     }
 }
@@ -281,11 +273,11 @@ impl AttributeTrait for XorMappedAttr {
         AKind::XorMappedAddress
     }
 
-    fn try_from(buffer: Bytes, tid: &Bytes) -> anyhow::Result<Self::Inner> {
+    fn decode(buffer: Bytes, tid: &TranID) -> anyhow::Result<Self::Inner> {
         util::parse_xor_address(buffer, tid)
     }
 
-    fn into(attr: Self::Inner, tid: &Bytes) -> Bytes {
+    fn encode(attr: Self::Inner, tid: &TranID) -> Bytes {
         util::bytes_xor_address(attr, tid)
     }
 }
@@ -298,11 +290,11 @@ impl AttributeTrait for MappedAttr {
         AKind::MappedAddress
     }
 
-    fn try_from(buffer: Bytes, _: &Bytes) -> anyhow::Result<Self::Inner> {
+    fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
         util::parse_address(buffer)
     }
 
-    fn into(attr: Self::Inner, _: &Bytes) -> Bytes {
+    fn encode(attr: Self::Inner, _: &TranID) -> Bytes {
         util::bytes_address(attr)
     }
 }
@@ -315,12 +307,12 @@ impl AttributeTrait for UsernameAttr {
         AKind::Username
     }
 
-    fn try_from(buffer: Bytes, _: &Bytes) -> anyhow::Result<Self::Inner> {
+    fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
         let username = String::from_utf8(buffer.to_vec()).map_err(|_| CodingError::InvalidData)?;
         Ok(username.trim_matches(char::from(0)).to_string())
     }
 
-    fn into(attr: Self::Inner, _: &Bytes) -> Bytes {
+    fn encode(attr: Self::Inner, _: &TranID) -> Bytes {
         Bytes::copy_from_slice(attr.as_bytes())
     }
 }
@@ -333,11 +325,11 @@ impl AttributeTrait for MessageIntegAttr {
         AKind::MessageIntegrity
     }
 
-    fn try_from(buffer: Bytes, _: &Bytes) -> anyhow::Result<Self::Inner> {
+    fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
         Ok(buffer)
     }
 
-    fn into(attr: Self::Inner, _: &Bytes) -> Bytes {
+    fn encode(attr: Self::Inner, _: &TranID) -> Bytes {
         attr
     }
 }
@@ -350,7 +342,7 @@ impl AttributeTrait for ErrorCodeAttr {
         AKind::ErrorCode
     }
 
-    fn try_from(buffer: Bytes, _: &Bytes) -> anyhow::Result<Self::Inner> {
+    fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
         let mut chunk = buffer.clone();
         let _ = chunk.get_u16();
         let errcode = chunk.get_u16();
@@ -358,7 +350,7 @@ impl AttributeTrait for ErrorCodeAttr {
         TurnErrorCode::try_from(errcode)
     }
 
-    fn into(turnerror: Self::Inner, _: &Bytes) -> Bytes {
+    fn encode(turnerror: Self::Inner, _: &TranID) -> Bytes {
         let code = turnerror.clone() as u32;
         let msg: &'static str = turnerror.into();
 
@@ -377,12 +369,12 @@ impl AttributeTrait for LifeTimeAttr {
         AKind::Lifetime
     }
 
-    fn try_from(buffer: Bytes, _: &Bytes) -> anyhow::Result<Self::Inner> {
+    fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
         let mut chunk = buffer.clone();
         Ok(chunk.get_u32())
     }
 
-    fn into(attr: Self::Inner, _: &Bytes) -> Bytes {
+    fn encode(attr: Self::Inner, _: &TranID) -> Bytes {
         let mut data = BytesMut::new();
         data.put_u32(attr);
         data.freeze()
@@ -397,32 +389,32 @@ impl AttributeTrait for NonceAttr {
         AKind::Nonce
     }
 
-    fn try_from(buffer: Bytes, _: &Bytes) -> anyhow::Result<Self::Inner> {
+    fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
         let realm = String::from_utf8(buffer.to_vec()).map_err(|_| CodingError::InvalidData)?;
         Ok(realm.trim_matches(char::from(0)).to_string())
     }
 
-    fn into(attr: Self::Inner, _: &Bytes) -> Bytes {
+    fn encode(attr: Self::Inner, _: &TranID) -> Bytes {
         Bytes::copy_from_slice(attr.as_bytes())
     }
 }
 
 pub struct RealmAttr;
 impl AttributeTrait for RealmAttr {
-    type Inner = Realm;
+    type Inner = String;
 
-    fn try_from(buffer: Bytes, _: &Bytes) -> anyhow::Result<Self::Inner> {
-        let realm = String::from_utf8(buffer.to_vec()).map_err(|_| CodingError::InvalidData);
-        let s = realm?.trim_matches(char::from(0)).to_string();
-        Ok(Realm(s))
+    fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
+        let realm = String::from_utf8(buffer.to_vec()).map_err(|_| CodingError::InvalidData)?;
+        let s = realm.trim_matches(char::from(0)).to_string();
+        Ok(s)
     }
 
     fn akind() -> AKind {
         AKind::Realm
     }
 
-    fn into(attr: Self::Inner, _: &Bytes) -> Bytes {
-        Bytes::copy_from_slice(attr.0.as_bytes())
+    fn encode(attr: Self::Inner, _: &TranID) -> Bytes {
+        Bytes::copy_from_slice(attr.as_bytes())
     }
 }
 
@@ -434,11 +426,11 @@ impl AttributeTrait for OriginAttr {
         AKind::Origin
     }
 
-    fn try_from(buffer: Bytes, _: &Bytes) -> anyhow::Result<Self::Inner> {
+    fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
         util::parse_address(buffer)
     }
 
-    fn into(attr: Self::Inner, _: &Bytes) -> Bytes {
+    fn encode(attr: Self::Inner, _: &TranID) -> Bytes {
         util::bytes_address(attr)
     }
 }
@@ -451,11 +443,11 @@ impl AttributeTrait for ReqTransportAttr {
         AKind::RequestedTransport
     }
 
-    fn try_from(buffer: Bytes, _: &Bytes) -> anyhow::Result<Self::Inner> {
+    fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
         Transport::try_from(buffer[0])
     }
 
-    fn into(attr: Self::Inner, _: &Bytes) -> Bytes {
+    fn encode(attr: Self::Inner, _: &TranID) -> Bytes {
         let mut data = BytesMut::new();
         data.put_u8(attr as u8);
         data.extend_from_slice(&[0x00, 0x00, 0x00]);
@@ -471,12 +463,12 @@ impl AttributeTrait for FingerprintAttr {
         AKind::Fingerprint
     }
 
-    fn try_from(buffer: Bytes, _: &Bytes) -> anyhow::Result<Self::Inner> {
+    fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
         let mut chunk = buffer.clone();
         Ok(chunk.get_u32())
     }
 
-    fn into(attr: Self::Inner, _: &Bytes) -> Bytes {
+    fn encode(attr: Self::Inner, _: &TranID) -> Bytes {
         let mut data = BytesMut::new();
         data.put_u32(attr);
         data.freeze()
@@ -491,14 +483,14 @@ impl AttributeTrait for ChannelNumberAttr {
         AKind::ChannelNumber
     }
 
-    fn into(attr: Self::Inner, _: &Bytes) -> Bytes {
+    fn encode(attr: Self::Inner, _: &TranID) -> Bytes {
         let mut data = BytesMut::new();
         data.put_u16(attr);
         data.put_u16(0x0000);
         data.freeze()
     }
 
-    fn try_from(buffer: Bytes, _: &Bytes) -> anyhow::Result<Self::Inner> {
+    fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
         let mut chunk = buffer.clone();
         Ok(chunk.get_u16())
     }

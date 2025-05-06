@@ -11,6 +11,7 @@ bytes = "1.10.1"
 clippy = "0.0.302"
 dashmap = "6.1.0"
 futures-util = "0.3.31"
+metrics = "0.24.2"
 opentelemetry = "0.29.1"
 opentelemetry-otlp = { version = "0.29.0", features = ["grpc-tonic"]}
 opentelemetry_sdk = "0.29.0"

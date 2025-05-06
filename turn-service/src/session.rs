@@ -142,30 +142,25 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
         };
 
         // Get the sender to relay the data to another session
-        let sender = match self.peers_sender_cache.get(&peer_addr) {
-            Some(sender) => sender,
-            None => {
-                // If not, check the Instance relays (expensive).
-                match self.instance.relays.get(&peer_addr) {
-                    Some(sender) => {
-                        self.peers_sender_cache.insert(peer_addr, sender.clone()); // and cache it
-                        sender
-                    }
-                    None => {
-                        tracing::error!("{:?} process_relay_data failed. no session bound to : {}", self.relay_addr, peer_addr);
-                        return Ok(());
-                    }
-                }
+        let sender = self.peers_sender_cache.get(&peer_addr).or_else(|| {
+            if let Some(sender) = self.instance.relays.get(&peer_addr) {
+                self.peers_sender_cache.insert(peer_addr, sender.clone()); // and cache it
+                Some(sender)
+            } else {
+                tracing::error!("{:?} process_relay_data failed. no session bound to : {}", self.relay_addr, peer_addr);
+                None
             }
-        };
+        });
 
-        if !sender.is_closed() {
-            let event = InputEvent::DataFromPeer(relay_addr, data);
-            if let Err(e) = sender.send(event) {
-                tracing::error!("process_relay_data failed. error dispatching to sender {e}");
+        if let Some(sender) = sender {
+            if !sender.is_closed() {
+                let event = InputEvent::DataFromPeer(relay_addr, data);
+                if let Err(e) = sender.send(event) {
+                    tracing::error!("process_relay_data failed. error dispatching to sender {e}");
+                }
+            } else {
+                tracing::warn!("process_relay_data : sender closed");
             }
-        } else {
-            tracing::warn!("process_relay_data : sender closed");
         }
 
         Ok(())
@@ -212,7 +207,7 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
                 match e {
                     SessionState::Disconnected => break,
                     SessionState::IdleTimeOut => break tracing::info!("Idle time out"),
-                    SessionState::ProtoError(ProtoError::NeedMoreData) => {}
+                    SessionState::ProtoError(ProtoError::NeedMoreData) => {} // TODO : Mark this as error for UDP. For TCP, its fine, because the stream is sometimes fragmented.
                     SessionState::ProtoError(perror) => tracing::error!("Proto Error - {:?}", perror),
                     SessionState::IOError(ioerror) => tracing::error!("IO Error - {:?}", ioerror),
                 }

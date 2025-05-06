@@ -1,5 +1,3 @@
-use tracing::instrument;
-
 use crate::{
     error::ProtoError,
     events::{SessionClose, TurnEvent},
@@ -13,6 +11,7 @@ use crate::{
     },
 };
 use std::net::SocketAddr;
+use tracing::instrument;
 
 pub(crate) struct ChannelBind;
 
@@ -37,7 +36,7 @@ impl ChannelBind {
         res.set_attr::<MessageIntegAttr>(res.compute_integrity()?);
         node.add_event(TurnEvent::SendToClient(res.into()));
 
-        tracing::info!(?peer_addr, channel, "Channel Bind Success");
+        tracing::info!(?peer_addr, channel = format!("0x{:x}", channel), "Channel Bind Success");
 
         Ok(())
     }
@@ -58,7 +57,10 @@ impl ChannelBind {
                 Self::reject(node, TurnErrorCode::BadRequest, req);
                 node.add_event(TurnEvent::Close(SessionClose::LifetimeExpired))
             }
-            _ if node.get_nonce_string() != &nonce => Self::reject(node, TurnErrorCode::StaleNonce, req),
+            _ if node.get_nonce_string() != &nonce => {
+                tracing::error!("Nonce Mismatch - {} {}", node.get_nonce_string(), nonce);
+                Self::reject(node, TurnErrorCode::StaleNonce, req);
+            }
             _ if !req.is_authenticated() => node.authenticate(req)?,
             _ if !node.is_peer(&peer_addr) => Self::reject(node, TurnErrorCode::BadRequest, req),
             _ => return Self::success(node, req, peer_addr, channel),
