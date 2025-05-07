@@ -66,7 +66,7 @@ mod state {
 }
 
 // TurnInstance is generic over `TurnService` - a trait that gives an extension to provide credentials and determines the behaviour of TURN implementation
-// and PortAllocator - a trait that gives the app freedom to choose and provide ports.
+// and PortAllocator - a trait that gives the app freedom to choose and provide ports (convinient to enforce business logic).
 #[derive(Debug)]
 pub struct TurnInstance<S: TurnService, P: PortAllocator> {
     pub service: S,
@@ -139,7 +139,7 @@ impl AppBuilder<Build> {
         loop {
             match endpoint.accept().await {
                 Ok((stream, sid)) => {
-                    let mut session = TurnSession::new(sid, stream, Arc::clone(&instance));
+                    let session = TurnSession::new(sid, stream, Arc::clone(&instance));
                     let span = span!(Level::INFO, "TurnSession", remote = ?session.sid.remote, local = ?session.sid.local, username = field::Empty, relay_addr = field::Empty);
                     tokio::spawn(async move {
                         let _ = session.run().instrument(span).await;

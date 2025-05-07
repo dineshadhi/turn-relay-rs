@@ -5,7 +5,7 @@ use crate::{
     wire::{
         attribute::{DataAttr, XorPeerAttr},
         error::TurnErrorCode,
-        message::{ChannelMessage, StunMessage, TranID, turnmessage::TurnMessage},
+        message::{ChannelMessage, StunMessage, turnmessage::TurnMessage},
         method::{MKind::Request, Method},
     },
 };
@@ -60,7 +60,7 @@ impl Handler {
         let msg: StunMessage = match node.get_bound_channel(&peer_addr) {
             Some(channel) => ChannelMessage { channel, data }.into(),
             None => {
-                let mut msg = TurnMessage::new(Method::DataIndication, TranID::default());
+                let mut msg = TurnMessage::new(Method::DataIndication);
                 msg.set_attr::<XorPeerAttr>(peer_addr);
                 msg.set_attr::<DataAttr>(data);
                 msg.into()

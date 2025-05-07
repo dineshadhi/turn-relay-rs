@@ -12,5 +12,3 @@ pub struct ProtoConfig {
     #[prop(key = "realm", default = "turn-rs")]
     pub realm: String,
 }
-
-impl ProtoConfig {}

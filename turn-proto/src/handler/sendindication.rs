@@ -1,6 +1,6 @@
 use crate::{
     error::ProtoError,
-    events::TurnEvent::RelayDataToPeer,
+    events::TurnEvent::SendToPeer,
     is_attrs,
     node::TurnNode,
     wire::{
@@ -23,7 +23,7 @@ impl SendIndication {
 
         match () {
             _ if !node.is_peer(&peer_addr) => tracing::error!("SI Failed : Permission Invalid - {}", peer_addr),
-            _ => node.add_event(RelayDataToPeer(peer_addr, data)),
+            _ => node.add_event(SendToPeer(peer_addr, data)),
         }
 
         Ok(())

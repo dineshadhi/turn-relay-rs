@@ -113,7 +113,10 @@ pub struct UdpEndpoint {
 
 impl UdpEndpoint {
     fn new(socket: Arc<UdpSocket>) -> Self {
-        Self { socket, senders: DashMap::new() }
+        Self {
+            socket,
+            senders: DashMap::new(),
+        }
     }
 }
 

@@ -19,12 +19,11 @@ pub enum TurnEvent {
     /// Checks if a permission is valid if the peer_addr is different from the relay_addr. Implementation must issue permission on TurnNode::issue_permission()
     NeedsPermission(TurnMessage),
     /// Request to relay the data to the session attached to the address allcoated to the peer
-    RelayDataToPeer(SocketAddr, Bytes),
+    SendToPeer(SocketAddr, Bytes),
     /// Session is closed.
     Close(SessionClose),
 }
 
-// Service --> State Machine
 pub enum InputEvent<B: Buf> {
     NetworkBytes(B),
     DataFromPeer(SocketAddr, Bytes),
@@ -37,10 +36,9 @@ impl Debug for TurnEvent {
             TurnEvent::NeedsAuth(_) => "NeedsAuth",
             TurnEvent::NeedsAllocation(_) => "NeedsAllocation",
             TurnEvent::NeedsPermission(_) => "IssuePermission",
-            TurnEvent::RelayDataToPeer(_, _) => "RelayDataToPeer",
+            TurnEvent::SendToPeer(_, _) => "RelayDataToPeer",
             TurnEvent::Close(_) => "Close",
         };
-
         write!(f, "{}", s)
     }
 }

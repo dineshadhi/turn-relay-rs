@@ -2,11 +2,13 @@ use crate::{
     endpoint::EndpointStream,
     instance::{TurnInstance, TurnService},
     portallocator::PortAllocator,
+    session_counter,
 };
 use anyhow::Result;
 use bytes::Bytes;
 use dashmap::DashMap;
 use futures_util::future::poll_fn;
+use opentelemetry::{KeyValue, global};
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -68,6 +70,9 @@ enum SessionState {
 impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
     pub fn new(sid: SessionID, stream: EndpointStream, instance: Arc<TurnInstance<S, P>>) -> Self {
         let (send, recv) = mpsc::unbounded_channel::<InputEvent<Bytes>>();
+
+        session_counter!(1, sid.protocol, sid.remote);
+
         Self {
             sid,
             stream,
@@ -132,11 +137,11 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
         Ok(())
     }
 
-    fn process_relay_data(&self, peer_addr: SocketAddr, data: Bytes) -> Result<(), SessionState> {
+    fn send_to_peer(&self, peer_addr: SocketAddr, data: Bytes) -> Result<(), SessionState> {
         let relay_addr = match self.relay_addr {
             Some(addr) => addr,
             None => {
-                tracing::error!("process_relay_data failed. no address bound to current session");
+                tracing::error!("send_to_peer failed. no address bound to current session");
                 return Ok(());
             }
         };
@@ -173,7 +178,7 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
             TurnEvent::NeedsAuth(req) => req.in_scope(|req| self.process_auth(node, req))?,
             TurnEvent::NeedsAllocation(req) => req.in_scope(|req| self.process_alloc(node, req, parent))?,
             TurnEvent::NeedsPermission(req) => req.in_scope(|req| self.process_permission(node, req))?,
-            TurnEvent::RelayDataToPeer(peer_addr, data) => self.process_relay_data(peer_addr, data)?,
+            TurnEvent::SendToPeer(peer_addr, data) => self.send_to_peer(peer_addr, data)?,
             TurnEvent::Close(closetype) => {
                 tracing::info!(?closetype, "TurnEvent::Close");
                 return Err(SessionState::Disconnected)?;
@@ -183,7 +188,8 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
         Ok(())
     }
 
-    pub async fn run(&mut self) -> anyhow::Result<()> {
+    // Session Event Loop
+    pub async fn run(mut self) -> anyhow::Result<()> {
         let mut node = TurnNode::new(self.sid.remote, Arc::clone(&self.instance.proto_config));
         let timeout = Duration::from_secs(self.instance.config.session_idle_time);
 
@@ -217,6 +223,8 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
         if let (Some(username), Some(relay_addr)) = (self.username.as_ref(), self.relay_addr) {
             self.instance.allocator.surrender_port(username, relay_addr.port());
         }
+
+        session_counter!(-1, self.sid.protocol, self.sid.remote);
 
         Ok(())
     }

@@ -40,10 +40,10 @@ impl TurnMessage {
             Method::Unknown(_) => todo!(),
         }
     }
-    pub fn new(method: Method, tid: TranID) -> Self {
+    pub fn new(method: Method) -> Self {
         Self {
             method,
-            tid,
+            tid: TranID::default(),
             attrs: StunAttrs::default(),
             challenge: None,
             authenticated: false,
