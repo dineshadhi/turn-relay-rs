@@ -136,6 +136,7 @@ impl AppBuilder<Init> {
 
 impl AppBuilder<Build> {
     async fn handle_endpoint<T: TurnEndpoint, S: TurnService, P: PortAllocator>(mut endpoint: T, instance: Arc<TurnInstance<S, P>>) {
+        tracing::info!("TURN Endpoint Listening : {:?}", endpoint);
         loop {
             match endpoint.accept().await {
                 Ok((stream, sid)) => {

@@ -70,9 +70,7 @@ enum SessionState {
 impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
     pub fn new(sid: SessionID, stream: EndpointStream, instance: Arc<TurnInstance<S, P>>) -> Self {
         let (send, recv) = mpsc::unbounded_channel::<InputEvent<Bytes>>();
-
         session_counter!(1, sid.protocol, sid.remote);
-
         Self {
             sid,
             stream,
@@ -110,7 +108,7 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
             Err(errcode) => return Ok(node.reject_request(req, errcode)?),
         };
 
-        let alloc_addr: SocketAddr = format!("{}:{}", self.instance.config.server_addr, port).parse().unwrap();
+        let alloc_addr: SocketAddr = format!("{}:{}", self.instance.config.server_addr_v4, port).parse().unwrap();
 
         self.relay_addr = Some(alloc_addr);
         self.username = Some(username.clone());
@@ -184,7 +182,6 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
                 return Err(SessionState::Disconnected)?;
             }
         }
-
         Ok(())
     }
 
@@ -199,12 +196,9 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
                     Ok(data) => self.process_incoming_data(&mut node, data),
                     Err(_) => Err(SessionState::IdleTimeOut),
                 },
-                event = poll_fn(|_| node.poll()) =>  self.process_event(&mut node, event, Span::current()).await,
+                event = poll_fn(|_| node.poll()) => self.process_event(&mut node, event, Span::current()).await,
                 event = self.recv.recv() => match event {
-                    Some(InputEvent::DataFromPeer(addr, data)) => {
-                        node.drive_forward(InputEvent::<Bytes>::DataFromPeer(addr, data))?;
-                        Ok(())
-                    }
+                    Some(InputEvent::DataFromPeer(addr, data)) => Ok(node.drive_forward(InputEvent::<Bytes>::DataFromPeer(addr, data))?),
                     _ => unreachable!(),
                 }
             };
@@ -212,7 +206,7 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
             if let Err(e) = state {
                 match e {
                     SessionState::Disconnected => break,
-                    SessionState::IdleTimeOut => break tracing::info!("Idle time out"),
+                    SessionState::IdleTimeOut => break tracing::info!("Idle time out {}", self.instance.config.session_idle_time),
                     SessionState::ProtoError(ProtoError::NeedMoreData) => {} // TODO : Mark this as error for UDP. For TCP, its fine, because the stream is sometimes fragmented.
                     SessionState::ProtoError(perror) => tracing::error!("Proto Error - {:?}", perror),
                     SessionState::IOError(ioerror) => tracing::error!("IO Error - {:?}", ioerror),

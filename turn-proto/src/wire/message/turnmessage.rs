@@ -131,7 +131,11 @@ impl TurnMessage {
     pub(crate) fn compute_integrity(&self) -> Result<Bytes, ProtoError> {
         let credential = match &self.credential {
             Some(cred) => cred,
-            None => return Err(ProtoError::MessageIntegrityFailed("Compute Integrity Failed : Missing Credential".into())),
+            None => {
+                return Err(ProtoError::MessageIntegrityFailed(
+                    "Compute Integrity Failed : TurnMessage is not configured with credential".into(),
+                ));
+            }
         };
 
         let mut buffer = Vec::new();
@@ -165,17 +169,17 @@ impl Decode for TurnMessage {
         }
 
         // Zero-Copy if underlying B is Bytes
-        let mut attrbytes = buffer.copy_to_bytes(attrlen);
+        let attrbytes = buffer.copy_to_bytes(attrlen);
 
         // Create a cursor so that attrbytes doesn't advance. We need it in place to compute Challenge blob.
-        let mut cursor = std::io::Cursor::new(&mut attrbytes);
+        let mut cursor = std::io::Cursor::new(&attrbytes);
         let (attrs, mipos) = StunAttrs::decode(&mut cursor)?;
 
         // Compute the challege blob if Message Integrity is present in the attrlist;
         let challenge = match mipos {
             Some(mipos) => {
                 let mut challenge = BytesMut::new();
-                let modlen = mipos + MI_ATTR_LENGTH; // Modified length of the challege. Only the length till the MIAttr and ignore all attrs after it.1
+                let modlen = mipos + MI_ATTR_LENGTH; // Modified length of the challege. Only the length till the MIAttr and ignore all attrs after it.
                 // Filling Stun Header
                 method.encode(&mut challenge)?;
                 modlen.encode(&mut challenge)?;

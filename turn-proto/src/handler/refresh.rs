@@ -51,7 +51,7 @@ impl Refresh {
 
         match () {
             _ if !node.has_valid_lifetime() => {
-                Self::reject(node, TurnErrorCode::BadRequest, req);
+                Self::reject(node, TurnErrorCode::AllocationMismatch, req); // Client tried to refresh allocation that doesn't exists. So AllocationMismatch
                 node.add_event(TurnEvent::Close(SessionClose::LifetimeExpired));
             }
             _ if node.get_nonce_string() != &nonce => Self::reject(node, TurnErrorCode::StaleNonce, req),
