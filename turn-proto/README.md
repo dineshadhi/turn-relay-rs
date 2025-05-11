@@ -1,3 +1,7 @@
+[![crates.io](https://img.shields.io/crates/v/turn-proto)](https://crates.io/crates/turn-proto)
+[![docs.rs](https://img.shields.io/docsrs/turn-proto)](https://docs.rs/turn-proto/)
+![downloads](https://img.shields.io/crates/d/turn-proto)
+
 # turn-proto
 
 A Sans-IO TURN (Traversal Using Relays around NAT) library for Rust.
