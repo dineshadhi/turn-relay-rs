@@ -374,9 +374,9 @@ dependencies = [
 
 [[package]]
 name = "props-util"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f808a7ae8ecb681c04984fc37a577e2fbe9541b604bae58982da9590fac3ff8d"
+checksum = "06282cf73b0e8de65abfaa60010cf453a048820da6f8e7fabd3c356e5790a1d5"
 dependencies = [
  "proc-macro2",
  "quote",

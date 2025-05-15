@@ -29,6 +29,7 @@ impl From<InstanceConfig> for ProtoConfig {
             permission_max_time: val.permission_max_time,
             nonce_max_time: val.nonce_max_time,
             realm: val.realm,
+            trusted_turn_ips: vec![val.server_addr_v4.into()],
         }
     }
 }

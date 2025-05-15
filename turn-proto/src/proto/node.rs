@@ -88,9 +88,11 @@ impl TurnNode {
     }
 
     pub(crate) fn is_peer(&mut self, peer_addr: &SocketAddr) -> bool {
-        self.peers
-            .iter()
-            .any(|((addr, _), at)| addr == peer_addr && !is_expired!(*at, self.config.permission_max_time))
+        self.config.trusted_turn_ips.contains(&peer_addr.ip())
+            || self
+                .peers
+                .iter()
+                .any(|((addr, _), at)| addr == peer_addr && !is_expired!(*at, self.config.permission_max_time))
     }
 
     pub(crate) fn bind_channel(&mut self, peer_addr: SocketAddr, channel: u16) {
@@ -219,8 +221,11 @@ impl TurnNode {
         Ok(())
     }
 
+    // If the IPaddr is same as the host, the permission is granted automatically. See `trusted_turn_ips` always have the host in the list. It can be configured to add other TURN nodes as trusted.
+    // Once the ips are added as trusted, no Permission Request (TurnEvent::NeedsPermission) will be sent to the app. SendIndications will be processed without explicit permission from the app.
+    // If the IPaddr is foreign, a proper request is sent to the app.
     pub(crate) fn is_permission_issued(&self, peer_addr: &SocketAddr) -> bool {
-        self.permitted_peers.contains(peer_addr)
+        self.config.trusted_turn_ips.contains(&peer_addr.ip()) || self.permitted_peers.contains(peer_addr)
     }
 
     pub fn set_realm(&mut self, realm: String) {

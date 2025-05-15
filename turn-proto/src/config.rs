@@ -1,3 +1,5 @@
+use std::net::IpAddr;
+
 use props_util::Properties;
 
 #[derive(Properties, Clone, Debug)]
@@ -11,4 +13,6 @@ pub struct ProtoConfig {
     pub nonce_max_time: u64,
     #[prop(key = "realm", default = "turn-rs")]
     pub realm: String,
+    #[prop(key = "trusted_turn_ips")]
+    pub trusted_turn_ips: Vec<IpAddr>,
 }
