@@ -88,7 +88,7 @@ impl TurnNode {
     }
 
     pub(crate) fn is_peer(&mut self, peer_addr: &SocketAddr) -> bool {
-        self.config.trusted_turn_ips.contains(&peer_addr.ip())
+        self.config.trusted_turn_ips.contains(&peer_addr.ip()) // If the is in trusted turn list, permission will be eventually granted upon request, so we consider it as peer
             || self
                 .peers
                 .iter()
@@ -223,7 +223,7 @@ impl TurnNode {
 
     // If the IPaddr is same as the host, the permission is granted automatically. See `trusted_turn_ips` always have the host in the list. It can be configured to add other TURN nodes as trusted.
     // Once the ips are added as trusted, no Permission Request (TurnEvent::NeedsPermission) will be sent to the app. SendIndications will be processed without explicit permission from the app.
-    // If the IPaddr is foreign, a proper request is sent to the app.
+    // If the IPaddr is foreign, a proper request must be sent to the app.
     pub(crate) fn is_permission_issued(&self, peer_addr: &SocketAddr) -> bool {
         self.config.trusted_turn_ips.contains(&peer_addr.ip()) || self.permitted_peers.contains(peer_addr)
     }

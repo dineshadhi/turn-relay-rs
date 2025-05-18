@@ -56,7 +56,7 @@ impl Allocate {
 
         // NOTE : Order of evaluation is important. Only one arm is selected.
         match () {
-            _ if node.get_relay_addr().is_some() => return Ok(()), // TODO : Treat as implicit success/refreAsh
+            _ if node.get_relay_addr().is_some() => return Ok(()), // TODO : Treat as implicit success/refresh
             _ if node.get_nonce_string() != &nonce => Self::reject(node, TurnErrorCode::StaleNonce, req),
             _ if !req.is_authenticated() => node.authenticate(req)?,
             _ if relay_addr.is_none() => {

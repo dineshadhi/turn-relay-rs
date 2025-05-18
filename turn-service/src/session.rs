@@ -9,7 +9,12 @@ use bytes::Bytes;
 use dashmap::DashMap;
 use futures_util::future::poll_fn;
 use opentelemetry::{KeyValue, global};
-use std::{io, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    io,
+    net::{SocketAddr, SocketAddrV4, SocketAddrV6},
+    sync::Arc,
+    time::Duration,
+};
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::{Span, instrument};
@@ -22,7 +27,8 @@ use turn_proto::{
     },
     node::TurnNode,
     wire::{
-        attribute::{UsernameAttr, XorPeerAttr},
+        attribute::{AddrFamily, ReqFamilyAddr, UsernameAttr, XorPeerAttr},
+        error::TurnErrorCode,
         message::TurnMessage,
     },
 };
@@ -108,7 +114,22 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
             Err(errcode) => return Ok(node.reject_request(req, errcode)?),
         };
 
-        let alloc_addr: SocketAddr = format!("{}:{}", self.instance.config.server_addr_v4, port).parse().unwrap();
+        // https://www.ietf.org/rfc/rfc6156.html#section-4.2
+        // If the REQUESTED-ADDRESS-FAMILY attribute is absent, the server MUST
+        // allocate an IPv4-relayed transport address for the TURN client.
+        let family = match req.get_attr::<ReqFamilyAddr>() {
+            Ok(family) => family,
+            Err(ProtoError::AttrMissing) => AddrFamily::IPv4,
+            Err(e) => return Err(SessionState::ProtoError(e)),
+        };
+
+        let alloc_addr: SocketAddr = match family {
+            AddrFamily::IPv4 => SocketAddrV4::new(self.instance.config.server_addr_v4, port).into(),
+            AddrFamily::IPv6 => match self.instance.config.server_addr_v6 {
+                Some(ip) => SocketAddrV6::new(ip, port, 0, 0).into(),
+                None => return Ok(node.reject_request(req, TurnErrorCode::AddrFamilyNotSupported)?),
+            },
+        };
 
         self.relay_addr = Some(alloc_addr);
         self.username = Some(username.clone());
@@ -139,7 +160,7 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
         let relay_addr = match self.relay_addr {
             Some(addr) => addr,
             None => {
-                tracing::error!("send_to_peer failed. no address bound to current session");
+                tracing::error!("send_to_peer failed. no address bound to current session"); // TODO : If the addr is not bound, check if the ip is of a trusted_turn_ips and forward the data.
                 return Ok(());
             }
         };

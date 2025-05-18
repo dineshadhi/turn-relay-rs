@@ -31,9 +31,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.97"
+version = "1.0.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
+checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 
 [[package]]
 name = "async-trait"
@@ -374,10 +374,11 @@ dependencies = [
 
 [[package]]
 name = "props-util"
-version = "0.1.4"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06282cf73b0e8de65abfaa60010cf453a048820da6f8e7fabd3c356e5790a1d5"
+checksum = "ca3c8c2c05f160ce97db69ab8f94eb905857e21853a0e42b69b8eb0dc48927fa"
 dependencies = [
+ "anyhow",
  "proc-macro2",
  "quote",
  "syn",

@@ -2,13 +2,7 @@ use crate::session::{Protocol, SessionID};
 use async_trait::async_trait;
 use bytes::{Buf, Bytes, BytesMut};
 use dashmap::DashMap;
-use std::{
-    fmt::Debug,
-    io::{self, Error},
-    net::SocketAddr,
-    sync::Arc,
-    time::Duration,
-};
+use std::{fmt::Debug, io, net::SocketAddr, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -26,6 +20,7 @@ pub enum EndpointError {
     SendError(#[from] SendError<Bytes>),
 }
 
+/// TurnEndpoint type that accepts a TURN Connection.
 #[async_trait]
 pub trait TurnEndpoint: Debug {
     async fn accept(&mut self) -> Result<(EndpointStream, SessionID), EndpointError>;
@@ -36,6 +31,7 @@ pub struct Endpoint {
     listen_addr: SocketAddr,
 }
 
+/// Endpoint to build TCP / UDP TurnEndpoints
 impl Endpoint {
     pub fn new(listen_addr: SocketAddr) -> Endpoint {
         Endpoint { listen_addr }
@@ -57,11 +53,12 @@ impl Endpoint {
 #[derive(Debug)]
 pub enum EndpointStream {
     Tcp(TcpStream),
-    Udp(mpsc::UnboundedReceiver<Bytes>, Arc<UdpSocket>, SocketAddr),
+    Udp(mpsc::UnboundedReceiver<Bytes>, Arc<UdpSocket>, SocketAddr), // Contains Receiver (from Endpoint), UDPSocket of the stream and the SocketAddr that the stream is attached to.
 }
 
 impl EndpointStream {
     /// Cancel Safety : This method is cancel safe because the underlying inner functions `read_buf` and `recv()` are cancel safe
+    /// Read data from the underlying EndpointStream. Returns None if the session is disconnected.
     pub async fn read(&mut self) -> Result<Option<Bytes>, io::Error> {
         match self {
             Self::Tcp(stream) => {
@@ -80,10 +77,10 @@ impl EndpointStream {
         timeout(duration, self.read()).await
     }
 
-    pub async fn write<B: Buf>(&mut self, mut data: B) -> Result<(), Error> {
+    pub async fn write<B: Buf>(&mut self, mut data: B) -> Result<(), io::Error> {
         match self {
-            Self::Tcp(stream) => stream.write_all_buf(&mut data).await?,
-            Self::Udp(_, socket, remote) => {
+            EndpointStream::Tcp(stream) => stream.write_all_buf(&mut data).await?,
+            EndpointStream::Udp(_, socket, remote) => {
                 while data.has_remaining() {
                     let n = socket.send_to(data.chunk(), *remote).await?;
                     data.advance(n);
@@ -139,6 +136,7 @@ impl TurnEndpoint for UdpEndpoint {
     // without worrying about underlying protocol.
     // TODO : Need more testing.
     // NOTE : accept() must be polled in loop continously for this to work on UDP. If not, no new packets will be read by the UDPSocket.
+    /// Returns a stream if a new connection is created. Until a new conn is created, it feeds the UDPDatagrams to the existing connections.
     async fn accept(&mut self) -> Result<(EndpointStream, SessionID), EndpointError> {
         loop {
             let mut buffer = BytesMut::with_capacity(2048);

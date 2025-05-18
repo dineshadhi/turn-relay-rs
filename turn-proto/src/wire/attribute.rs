@@ -25,6 +25,7 @@ pub enum AKind {
     Realm = 0x0014,
     Origin = 0x802f,
     RequestedTransport = 0x0019,
+    RequestedAddrFamily = 0x0017,
     Fingerprint = 0x8028,
     Unknown(u16),
 }
@@ -45,6 +46,7 @@ impl AKind {
         (AKind::Realm, 0x0014),
         (AKind::Origin, 0x802f),
         (AKind::RequestedTransport, 0x0019),
+        (AKind::RequestedAddrFamily, 0x0017),
         (AKind::Fingerprint, 0x8028),
     ];
 
@@ -136,11 +138,12 @@ impl StunAttrs {
                 AKind::Realm => format!("Realm - {:?}", RealmAttr::decode(bytes.to_owned(), tid)?),
                 AKind::Origin => format!("Realm - {:?}", OriginAttr::decode(bytes.to_owned(), tid)?),
                 AKind::RequestedTransport => format!("ReqTransport - {:?}", ReqTransportAttr::decode(bytes.to_owned(), tid)?),
+                AKind::RequestedAddrFamily => format!("ReqAddrFamily - {:?}", ReqFamilyAddr::decode(bytes.to_owned(), tid)?),
                 AKind::Fingerprint => format!("Fingerprint : {}", FingerprintAttr::decode(bytes.to_owned(), tid)?),
                 AKind::Unknown(_) => "UnknownAttr".to_string(),
             };
 
-            res = format!("{} {}", res, s);
+            res = format!("{res} {s}");
         }
 
         Ok(res)
@@ -181,7 +184,7 @@ impl Encode for StunAttrs {
             akind.encode(buffer)?;
             adata.len().encode(buffer)?;
             // Its not Zero-Copy, this is the best I could do without fighting borrow-checker.
-            // TODO : Optimise this, because firefox only deals with Send Indication and DataChannels. So, the entire data will run via copy.
+            // FIXME : Optimise this, because firefox only deals with Send Indication and DataChannels. So, the entire data will run via copy.
             buffer.put_slice(adata);
             buffer.put_bytes(0x00, compute_padding!(adata.len()));
         }
@@ -201,6 +204,23 @@ impl TryFrom<u8> for Transport {
         Ok(match value {
             0x06 => Self::Tcp,
             0x11 => Self::Udp,
+            _ => bail!(CodingError::InvalidData),
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum AddrFamily {
+    IPv4 = 0x01,
+    IPv6 = 0x02,
+}
+
+impl TryFrom<u8> for AddrFamily {
+    type Error = anyhow::Error;
+    fn try_from(value: u8) -> anyhow::Result<Self, Self::Error> {
+        Ok(match value {
+            0x01 => Self::IPv4,
+            0x02 => Self::IPv6,
             _ => bail!(CodingError::InvalidData),
         })
     }
@@ -403,14 +423,14 @@ pub struct RealmAttr;
 impl AttributeTrait for RealmAttr {
     type Inner = String;
 
+    fn akind() -> AKind {
+        AKind::Realm
+    }
+
     fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
         let realm = String::from_utf8(buffer.to_vec()).map_err(|_| CodingError::InvalidData)?;
         let s = realm.trim_matches(char::from(0)).to_string();
         Ok(s)
-    }
-
-    fn akind() -> AKind {
-        AKind::Realm
     }
 
     fn encode(attr: Self::Inner, _: &TranID) -> Bytes {
@@ -445,6 +465,26 @@ impl AttributeTrait for ReqTransportAttr {
 
     fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
         Transport::try_from(buffer[0])
+    }
+
+    fn encode(attr: Self::Inner, _: &TranID) -> Bytes {
+        let mut data = BytesMut::new();
+        data.put_u8(attr as u8);
+        data.extend_from_slice(&[0x00, 0x00, 0x00]);
+        data.freeze()
+    }
+}
+
+pub struct ReqFamilyAddr;
+impl AttributeTrait for ReqFamilyAddr {
+    type Inner = AddrFamily;
+
+    fn akind() -> AKind {
+        AKind::RequestedAddrFamily
+    }
+
+    fn decode(buffer: Bytes, _: &TranID) -> anyhow::Result<Self::Inner> {
+        AddrFamily::try_from(buffer[0])
     }
 
     fn encode(attr: Self::Inner, _: &TranID) -> Bytes {

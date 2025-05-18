@@ -7,16 +7,12 @@ use crate::error::ProtoError;
 pub enum CodingError {
     #[error("Invalid Magic Cookie {0}")]
     InvalidCookie(u32),
-
     #[error("Invalid Data")]
     InvalidData,
-
     #[error("Uknown Error Code {0}")]
     UnknownErrorCode(u16),
-
     #[error("AttrNotFound")]
     AttrNotFound,
-
     #[error("Unsupported Method")]
     UnsupportedMethod,
 }

@@ -30,11 +30,10 @@ macro_rules! ipv6_listener_socket {
 pub(crate) type Relays = DashMap<SocketAddr, UnboundedSender<InputEvent<Bytes>>>;
 
 pub trait TurnService: Sync + Send + 'static {
-    /// Callback function to obtain the password for the corresponding username. Optionally you can pass the Realm if needed which will be
-    /// maintained throughout the session or until next authentication.
+    /// Callback function to obtain the password for the corresponding username.
     fn get_password(&self, username: &str) -> Result<String, TurnErrorCode>;
 
-    /// Checks if a permission can be issued for the given SocketAddr
+    /// Checks if a permission can be issued for the given SocketAddr. This is useful to enforce Strict TURN policy ignoring all Permission requests for Server-reflexive or Host address.
     fn check_permission(&self, _: SocketAddr) -> Result<(), TurnErrorCode> {
         Ok(())
     }
@@ -66,7 +65,7 @@ mod state {
 }
 
 // TurnInstance is generic over `TurnService` - a trait that gives an extension to provide credentials and determines the behaviour of TURN implementation
-// and PortAllocator - a trait that gives the app freedom to choose and provide ports (convinient to enforce business logic).
+// and PortAllocator - a trait that gives the app freedom to choose and provide ports (convenient to enforce business logic).
 #[derive(Debug)]
 pub struct TurnInstance<S: TurnService, P: PortAllocator> {
     pub service: S,
@@ -102,8 +101,8 @@ impl AppBuilder<Init> {
         self
     }
 
-    pub fn with_ipv6(mut self) -> Self {
-        self.inner.ipv6 = true;
+    pub fn with_ipv6(mut self, val: bool) -> Self {
+        self.inner.ipv6 = val;
         self
     }
 

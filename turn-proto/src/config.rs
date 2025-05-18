@@ -1,17 +1,16 @@
-use std::net::IpAddr;
-
 use props_util::Properties;
+use std::net::IpAddr;
 
 #[derive(Properties, Clone, Debug)]
 #[allow(unused)]
 pub struct ProtoConfig {
-    #[prop(key = "max_alloc_time", default = "600")]
+    #[prop(default = "600")]
     pub max_alloc_time: u32,
-    #[prop(key = "permission_max_time", default = "300")]
+    #[prop(default = "300")]
     pub permission_max_time: u64,
-    #[prop(key = "nonce_max_time", default = "600")]
+    #[prop(default = "600")]
     pub nonce_max_time: u64,
-    #[prop(key = "realm", default = "turn-rs")]
+    #[prop(default = "turn-rs")]
     pub realm: String,
     #[prop(key = "trusted_turn_ips")]
     pub trusted_turn_ips: Vec<IpAddr>,

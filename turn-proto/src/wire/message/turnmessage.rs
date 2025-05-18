@@ -86,6 +86,7 @@ impl TurnMessage {
         self.authenticated
     }
 
+    // Convenient func to run functions inside a span assigned to this TurnMessage
     pub fn in_scope<F: FnOnce(Self) -> T, T>(self, f: F) -> T {
         self.span.clone().in_scope(|| f(self))
     }
@@ -95,7 +96,7 @@ impl TurnMessage {
             Some(cred) => cred,
             None => &self
                 .compute_credential(password)
-                .map_err(|e| ProtoError::MessageIntegrityFailed(format!("{}", e)))?,
+                .map_err(|e| ProtoError::MessageIntegrityFailed(format!("{e}")))?,
         };
 
         let challenge = match &self.challenge {
@@ -108,7 +109,7 @@ impl TurnMessage {
 
         let integbytes = self
             .get_attr::<MessageIntegAttr>()
-            .map_err(|e| ProtoError::MessageIntegrityFailed(format!("{}", e)))?;
+            .map_err(|e| ProtoError::MessageIntegrityFailed(format!("{e}")))?;
 
         match () {
             _ if tag.as_ref() == integbytes => {

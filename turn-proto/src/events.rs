@@ -39,6 +39,6 @@ impl Debug for TurnEvent {
             TurnEvent::SendToPeer(_, _) => "RelayDataToPeer",
             TurnEvent::Close(_) => "Close",
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }

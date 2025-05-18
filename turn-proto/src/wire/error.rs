@@ -15,7 +15,7 @@ pub enum TurnErrorCode {
     UnknownAttribute = 0x0414,
     AllocationMismatch = 0x0425,
     StaleNonce = 0x0426,
-    AddressFamilyNotSupported = 0x0428,
+    AddrFamilyNotSupported = 0x0428,
     WrongCredentials = 0x0429,
     UnsupportedTransportAddress = 0x042A,
     AllocationQuotaReached = 0x0456,
@@ -50,7 +50,7 @@ impl TryFrom<u16> for TurnErrorCode {
             0x0414 => TurnErrorCode::UnknownAttribute,
             0x0425 => TurnErrorCode::AllocationMismatch,
             0x0426 => TurnErrorCode::StaleNonce,
-            0x0428 => TurnErrorCode::AddressFamilyNotSupported,
+            0x0428 => TurnErrorCode::AddrFamilyNotSupported,
             0x0429 => TurnErrorCode::WrongCredentials,
             0x042A => TurnErrorCode::UnsupportedTransportAddress,
             0x0456 => TurnErrorCode::AllocationQuotaReached,
@@ -72,7 +72,7 @@ impl From<&str> for TurnErrorCode {
             "UnknownAttribute" => TurnErrorCode::UnknownAttribute,
             "AllocationMismatch" => TurnErrorCode::AllocationMismatch,
             "StaleNonce" => TurnErrorCode::StaleNonce,
-            "AddressFamilyNotSupported" => TurnErrorCode::AddressFamilyNotSupported,
+            "AddressFamilyNotSupported" => TurnErrorCode::AddrFamilyNotSupported,
             "WrongCredentials" => TurnErrorCode::WrongCredentials,
             "UnsupportedTransportAddress" => TurnErrorCode::UnsupportedTransportAddress,
             "AllocationQuotaReached" => TurnErrorCode::AllocationQuotaReached,
@@ -94,7 +94,7 @@ impl From<TurnErrorCode> for &'static str {
             TurnErrorCode::UnknownAttribute => "UnknownAttribute",
             TurnErrorCode::AllocationMismatch => "AllocationMismatch",
             TurnErrorCode::StaleNonce => "StaleNonce",
-            TurnErrorCode::AddressFamilyNotSupported => "AddressFamilyNotSupported",
+            TurnErrorCode::AddrFamilyNotSupported => "AddressFamilyNotSupported",
             TurnErrorCode::WrongCredentials => "WrongCredentials",
             TurnErrorCode::UnsupportedTransportAddress => "UnsupportedTransportAddress",
             TurnErrorCode::AllocationQuotaReached => "AllocationQuotaReached",
@@ -108,7 +108,7 @@ impl From<TurnErrorCode> for &'static str {
 impl std::fmt::Display for TurnErrorCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let codestr: &'static str = self.clone().into();
-        write!(f, "{}", codestr)
+        write!(f, "{codestr}")
     }
 }
 
