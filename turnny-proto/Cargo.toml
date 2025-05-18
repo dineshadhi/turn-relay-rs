@@ -1,12 +1,12 @@
 [package]
-name = "turn-proto"
+name = "turnny-proto"
 version = "0.1.0"
 edition = "2024"
 
 authors = ["dineshadhi <dinesh10c04@gmail.com>"]
 readme = "README.md"
 description = "Sans-IO TURN library"
-repository = "https://github.com/dineshadhi/turn-rs.git"
+repository = "https://github.com/dineshadhi/turnny-rs.git"
 license = "MIT"
 keywords = ["webrtc", "turn"]
 categories = ["network-programming"]
