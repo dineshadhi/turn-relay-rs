@@ -1,14 +1,16 @@
 use crate::{
     endpoint::EndpointStream,
     instance::{TurnInstance, TurnService},
+    isc::grpc::TurnGrpcMessage,
     portallocator::PortAllocator,
     session_counter,
 };
-use anyhow::Result;
+use anyhow::{Result, bail};
 use bytes::Bytes;
 use dashmap::DashMap;
 use futures_util::future::poll_fn;
 use opentelemetry::{KeyValue, global};
+use prost::Message;
 use std::{
     io,
     net::{SocketAddr, SocketAddrV4, SocketAddrV6},
@@ -18,7 +20,7 @@ use std::{
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::{Span, instrument};
-use turn_proto::{
+use turnny_proto::{
     coding::Encode,
     error::ProtoError,
     events::{
@@ -61,6 +63,12 @@ pub struct TurnSession<S: TurnService, P: PortAllocator> {
     peers_sender_cache: DashMap<SocketAddr, UnboundedSender<InputEvent<Bytes>>>,
 }
 
+pub struct ISCSession<S: TurnService, P: PortAllocator> {
+    sid: SessionID,
+    stream: EndpointStream,
+    instance: Arc<TurnInstance<S, P>>,
+}
+
 #[derive(Error, Debug)]
 enum SessionState {
     #[error("Disconnected")]
@@ -71,6 +79,41 @@ enum SessionState {
     ProtoError(#[from] ProtoError),
     #[error("IO Error")]
     IOError(#[from] io::Error),
+}
+
+impl<S: TurnService, P: PortAllocator> ISCSession<S, P> {
+    pub fn new(sid: SessionID, stream: EndpointStream, instance: Arc<TurnInstance<S, P>>) -> Self {
+        Self { sid, stream, instance }
+    }
+
+    async fn process_isc_packets(&mut self, bytes: Bytes) -> anyhow::Result<()> {
+        let grpc_msg = TurnGrpcMessage::decode(bytes)?;
+        let relay_addr = grpc_msg.recv_relay_addr.unwrap().try_into()?;
+        let peer_addr = grpc_msg.send_relay_addr.unwrap().try_into()?;
+        let data = grpc_msg.data;
+
+        let sender = match self.instance.relays.get(&relay_addr) {
+            Some(sender) => sender,
+            None => bail!("no session is bound : {:?}", relay_addr),
+        };
+
+        sender.send(InputEvent::DataFromPeer(peer_addr, Bytes::from(data)))?;
+        Ok(())
+    }
+
+    pub async fn run(mut self) {
+        loop {
+            let res = match self.stream.read().await {
+                Ok(Some(bytes)) => self.process_isc_packets(bytes).await,
+                Ok(None) => break tracing::error!("isc_session disconnected"),
+                Err(e) => break tracing::error!("isc_session_error : {:?}", e),
+            };
+
+            if let Err(e) = res {
+                tracing::error!(sid=?self.sid, "isc processing error : {:?}", e)
+            }
+        }
+    }
 }
 
 impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
@@ -156,36 +199,66 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
         Ok(())
     }
 
-    fn send_to_peer(&self, peer_addr: SocketAddr, data: Bytes) -> Result<(), SessionState> {
+    async fn send_to_peer(&mut self, peer_addr: SocketAddr, data: Bytes) -> Result<(), SessionState> {
         let relay_addr = match self.relay_addr {
             Some(addr) => addr,
             None => {
-                tracing::error!("send_to_peer failed. no address bound to current session"); // TODO : If the addr is not bound, check if the ip is of a trusted_turn_ips and forward the data.
+                tracing::error!("send_to_peer failed. no address bound to current session");
                 return Ok(());
             }
         };
 
+        // If the peer_addr is foreign and a trusted turn ip, forward the data
+        if peer_addr.ip() != relay_addr.ip() && self.instance.config.trusted_turn_ips.contains(&peer_addr.ip()) {
+            return self.send_to_server(peer_addr, data).await;
+        }
+
         // Get the sender to relay the data to another session
         let sender = self.peers_sender_cache.get(&peer_addr).or_else(|| {
-            if let Some(sender) = self.instance.relays.get(&peer_addr) {
-                self.peers_sender_cache.insert(peer_addr, sender.clone()); // and cache it
-                Some(sender)
-            } else {
-                tracing::error!("{:?} process_relay_data failed. no session bound to : {}", self.relay_addr, peer_addr);
-                None
+            match self.instance.relays.get(&peer_addr) {
+                Some(sender) => {
+                    self.peers_sender_cache.insert(peer_addr, sender.clone()); // and cache it
+                    Some(sender)
+                }
+                None => None,
             }
         });
 
-        if let Some(sender) = sender {
-            if !sender.is_closed() {
-                let event = InputEvent::DataFromPeer(relay_addr, data);
-                if let Err(e) = sender.send(event) {
-                    tracing::error!("process_relay_data failed. error dispatching to sender {e}");
+        match sender {
+            Some(sender) => match sender.is_closed() {
+                true => tracing::warn!("process_relay data : sender close"),
+                false => {
+                    let event = InputEvent::DataFromPeer(relay_addr, data);
+                    if let Err(e) = sender.send(event) {
+                        tracing::error!("process_relay_data failed. error dispatching to sender {e}");
+                    }
                 }
-            } else {
-                tracing::warn!("process_relay_data : sender closed");
+            },
+            None => tracing::error!("no session bound to : {:?}", peer_addr),
+        };
+
+        Ok(())
+    }
+
+    async fn send_to_server(&mut self, peer_addr: SocketAddr, data: Bytes) -> Result<(), SessionState> {
+        let relay_addr = match self.relay_addr {
+            Some(addr) => addr,
+            None => {
+                tracing::error!("send_to_server failed. no address bound to current session");
+                return Ok(());
             }
-        }
+        };
+
+        let server_grpc_addr = SocketAddr::new(peer_addr.ip(), self.instance.config.grpc_port);
+        let msg = TurnGrpcMessage {
+            send_relay_addr: Some(relay_addr.try_into().map_err(ProtoError::CodingError)?),
+            recv_relay_addr: Some(peer_addr.try_into().map_err(ProtoError::CodingError)?),
+            data: data.to_vec(),
+        };
+
+        self.stream
+            .write_to(server_grpc_addr, msg.bytes().map_err(ProtoError::CodingError)?)
+            .await?;
 
         Ok(())
     }
@@ -197,7 +270,7 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
             TurnEvent::NeedsAuth(req) => req.in_scope(|req| self.process_auth(node, req))?,
             TurnEvent::NeedsAllocation(req) => req.in_scope(|req| self.process_alloc(node, req, parent))?,
             TurnEvent::NeedsPermission(req) => req.in_scope(|req| self.process_permission(node, req))?,
-            TurnEvent::SendToPeer(peer_addr, data) => self.send_to_peer(peer_addr, data)?,
+            TurnEvent::SendToPeer(peer_addr, data) => self.send_to_peer(peer_addr, data).await?,
             TurnEvent::Close(closetype) => {
                 tracing::info!(?closetype, "TurnEvent::Close");
                 return Err(SessionState::Disconnected)?;
@@ -235,8 +308,10 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
             }
         }
 
-        if let (Some(username), Some(relay_addr)) = (self.username.as_ref(), self.relay_addr) {
-            self.instance.allocator.surrender_port(username, relay_addr.port());
+        if let Some(username) = self.username.as_ref() {
+            if let Some(relay_addr) = self.relay_addr {
+                self.instance.allocator.surrender_port(username, relay_addr.port());
+            }
         }
 
         session_counter!(-1, self.sid.protocol, self.sid.remote);

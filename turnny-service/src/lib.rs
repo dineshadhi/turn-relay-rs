@@ -4,8 +4,11 @@ pub mod instance;
 pub mod portallocator;
 pub mod session;
 
-pub use turn_proto::config::*;
-pub use turn_proto::wire::*;
+#[cfg(feature = "isc")]
+pub mod isc;
+
+pub use turnny_proto::config::*;
+pub use turnny_proto::wire::*;
 
 #[macro_export]
 macro_rules! session_counter {

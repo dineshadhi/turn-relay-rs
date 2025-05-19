@@ -1,5 +1,5 @@
 [workspace]
-members = ["turn-proto", "turn-service"]
+members = ["turnny-proto", "turnny-service"]
 resolver = "2"
 
 [workspace.dependencies]

@@ -1,13 +1,15 @@
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use props_util::Properties;
-use turn_proto::config::ProtoConfig;
+use turnny_proto::config::ProtoConfig;
 
 #[derive(Properties, Debug, Clone)]
 #[allow(unused)]
 pub struct InstanceConfig {
     pub server_addr_v4: Ipv4Addr,
     pub server_addr_v6: Option<Ipv6Addr>,
+    #[prop(default = "8443")]
+    pub grpc_port: u16,
     #[prop(default = "600")]
     pub nonce_max_time: u64,
     #[prop(default = "300")]
@@ -18,6 +20,8 @@ pub struct InstanceConfig {
     pub session_idle_time: u64,
     #[prop(default = "turn-rs")]
     pub realm: String,
+    #[prop(default = "")]
+    pub trusted_turn_ips: Vec<IpAddr>,
 }
 
 impl From<InstanceConfig> for ProtoConfig {

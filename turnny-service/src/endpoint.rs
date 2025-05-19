@@ -89,6 +89,20 @@ impl EndpointStream {
         };
         Ok(())
     }
+
+    /// Only works on UDP, panics if the stream is TCP.
+    pub async fn write_to<B: Buf>(&mut self, remote: SocketAddr, mut data: B) -> Result<(), io::Error> {
+        match self {
+            EndpointStream::Tcp(_) => panic!(),
+            EndpointStream::Udp(_, socket, _) => {
+                while data.has_remaining() {
+                    let n = socket.send_to(data.chunk(), remote).await?;
+                    data.advance(n);
+                }
+            }
+        };
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
