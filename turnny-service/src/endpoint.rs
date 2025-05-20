@@ -150,7 +150,7 @@ impl TurnEndpoint for UdpEndpoint {
     // without worrying about underlying protocol.
     // TODO : Need more testing.
     // NOTE : accept() must be polled in loop continously for this to work on UDP. If not, no new packets will be read by the UDPSocket.
-    /// Returns a stream if a new connection is created. Until a new conn is created, it feeds the UDPDatagrams to the existing connections.
+    /// Returns a stream if a new connection is created. For TCP, it is straight forward. For UPD, until a new conn is created, it feeds the UDPDatagrams to the existing connections.
     async fn accept(&mut self) -> Result<(EndpointStream, SessionID), EndpointError> {
         loop {
             let mut buffer = BytesMut::with_capacity(2048);

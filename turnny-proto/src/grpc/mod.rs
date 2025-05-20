@@ -4,7 +4,11 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use bytes::{Bytes, BytesMut};
 use grpc_ip_addr::Addr;
 use prost::Message;
-use turnny_proto::coding::CodingError;
+
+use crate::{
+    coding::{CodingError, Decode},
+    error::ProtoError,
+};
 
 // Imports prost_build generated code.
 include!(concat!(env!("OUT_DIR"), "/isc.proto.rs"));
@@ -14,6 +18,15 @@ impl TurnGrpcMessage {
         let mut data = BytesMut::new();
         self.encode(&mut data).map_err(|_| CodingError::InvalidData)?;
         Ok(data.freeze())
+    }
+}
+
+impl Decode for TurnGrpcMessage {
+    type Output = Self;
+
+    fn decode<B: bytes::Buf>(buffer: &mut B) -> Result<Self::Output, ProtoError> {
+        let msg = <TurnGrpcMessage as prost::Message>::decode(buffer).map_err(|_| CodingError::InvalidData)?;
+        Ok(msg)
     }
 }
 

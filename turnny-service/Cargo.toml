@@ -3,10 +3,6 @@ name = "turnny-service"
 version = "0.1.0"
 edition = "2024"
 
-[features]
-default = ["isc"]
-isc = ["prost"]
-
 [dependencies]
 anyhow = "1.0.97"
 async-trait = "0.1.88"
@@ -21,7 +17,3 @@ thiserror = "2.0.12"
 tokio = { version = "1.44.1", features = ["full"] }
 tracing = "0.1.41"
 turnny-proto = { path = "../turnny-proto" }
-prost = { version = "0.13.5", optional = true }
-
-[build-dependencies]
-prost-build = "0.13.5"

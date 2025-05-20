@@ -4,9 +4,6 @@ pub mod instance;
 pub mod portallocator;
 pub mod session;
 
-#[cfg(feature = "isc")]
-pub mod isc;
-
 pub use turnny_proto::config::*;
 pub use turnny_proto::wire::*;
 

@@ -1,16 +1,14 @@
 use crate::{
     endpoint::EndpointStream,
     instance::{TurnInstance, TurnService},
-    isc::grpc::TurnGrpcMessage,
     portallocator::PortAllocator,
     session_counter,
 };
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use bytes::Bytes;
 use dashmap::DashMap;
 use futures_util::future::poll_fn;
 use opentelemetry::{KeyValue, global};
-use prost::Message;
 use std::{
     io,
     net::{SocketAddr, SocketAddrV4, SocketAddrV6},
@@ -21,12 +19,13 @@ use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::{Span, instrument};
 use turnny_proto::{
-    coding::Encode,
+    coding::{Decode, Encode},
     error::ProtoError,
     events::{
         InputEvent::{self, NetworkBytes},
         TurnEvent,
     },
+    grpc::TurnGrpcMessage,
     node::TurnNode,
     wire::{
         attribute::{AddrFamily, ReqFamilyAddr, UsernameAttr, XorPeerAttr},
@@ -86,10 +85,10 @@ impl<S: TurnService, P: PortAllocator> ISCSession<S, P> {
         Self { sid, stream, instance }
     }
 
-    async fn process_isc_packets(&mut self, bytes: Bytes) -> anyhow::Result<()> {
-        let grpc_msg = TurnGrpcMessage::decode(bytes)?;
-        let relay_addr = grpc_msg.recv_relay_addr.unwrap().try_into()?;
-        let peer_addr = grpc_msg.send_relay_addr.unwrap().try_into()?;
+    async fn process_isc_packets(&mut self, mut bytes: Bytes) -> anyhow::Result<()> {
+        let grpc_msg = TurnGrpcMessage::decode(&mut bytes).context("Error parsing grpcmessage")?;
+        let relay_addr = grpc_msg.recv_relay_addr.unwrap().try_into().context("Error Parsing recv_relay_addr")?;
+        let peer_addr = grpc_msg.send_relay_addr.unwrap().try_into().context("Error parsing send_relay_addr")?;
         let data = grpc_msg.data;
 
         let sender = match self.instance.relays.get(&relay_addr) {
@@ -225,16 +224,13 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
         });
 
         match sender {
-            Some(sender) => match sender.is_closed() {
-                true => tracing::warn!("process_relay data : sender close"),
-                false => {
-                    let event = InputEvent::DataFromPeer(relay_addr, data);
-                    if let Err(e) = sender.send(event) {
-                        tracing::error!("process_relay_data failed. error dispatching to sender {e}");
-                    }
+            Some(sender) => match !sender.is_closed() {
+                true if let Err(e) = sender.send(InputEvent::DataFromPeer(relay_addr, data)) => {
+                    tracing::error!("process_relay_data failed. error dispatching to sender {e}")
                 }
+                _ => tracing::warn!("process_relay data : sender close"),
             },
-            None => tracing::error!("no session bound to : {:?}", peer_addr),
+            None => tracing::error!("no session bound to : {:?}", peer_addr), // NOTE : For now, No data will be sent to server-reflexive or host-reflexive candidates.
         };
 
         Ok(())
