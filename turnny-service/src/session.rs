@@ -131,8 +131,8 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
         }
     }
 
-    fn process_incoming_data(&mut self, node: &mut TurnNode, data: Result<Option<Bytes>, io::Error>) -> Result<(), SessionState> {
-        match data? {
+    fn process_incoming_data(&mut self, node: &mut TurnNode, data: Option<Bytes>) -> Result<(), SessionState> {
+        match data {
             Some(data) => node.drive_forward(NetworkBytes(data)).map_err(|e| e.into()),
             None => Err(SessionState::Disconnected),
         }
@@ -166,7 +166,7 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
         };
 
         let alloc_addr: SocketAddr = match family {
-            AddrFamily::IPv4 => SocketAddrV4::new(self.instance.config.server_addr_v4, port).into(),
+            AddrFamily::IPv4 => SocketAddrV4::new(self.instance.config.server_addr, port).into(),
             AddrFamily::IPv6 => match self.instance.config.server_addr_v6 {
                 Some(ip) => SocketAddrV6::new(ip, port, 0, 0).into(),
                 None => return Ok(node.reject_request(req, TurnErrorCode::AddrFamilyNotSupported)?),
@@ -225,8 +225,10 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
 
         match sender {
             Some(sender) => match !sender.is_closed() {
-                true if let Err(e) = sender.send(InputEvent::DataFromPeer(relay_addr, data)) => {
-                    tracing::error!("process_relay_data failed. error dispatching to sender {e}")
+                true => {
+                    if let Err(e) = sender.send(InputEvent::DataFromPeer(relay_addr, data)) {
+                        tracing::error!("process_relay_data failed. error dispatching to sender {e}");
+                    }
                 }
                 _ => tracing::warn!("process_relay data : sender close"),
             },
@@ -283,7 +285,7 @@ impl<S: TurnService, P: PortAllocator> TurnSession<S, P> {
         loop {
             let state = tokio::select! {
                 read = self.stream.read_with_timeout(timeout) => match read {
-                    Ok(data) => self.process_incoming_data(&mut node, data),
+                    Ok(data) => self.process_incoming_data(&mut node, data?),
                     Err(_) => Err(SessionState::IdleTimeOut),
                 },
                 event = poll_fn(|_| node.poll()) => self.process_event(&mut node, event, Span::current()).await,

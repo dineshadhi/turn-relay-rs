@@ -179,7 +179,7 @@ impl AppBuilder<Build> {
             service,
             allocator,
             config: self.inner.config.clone(),
-            proto_config: Arc::new(self.inner.config.into()), // Wrapping with a redundant Arc, because we need to pass it again to TurnNode later
+            proto_config: Arc::new(ProtoConfig::from(self.inner.config).unwrap()), // Wrapping with a redundant Arc, because we need to pass it again to TurnNode later
             relays: DashMap::new(),
         });
 

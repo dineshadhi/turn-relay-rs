@@ -296,9 +296,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.171"
+version = "0.2.172"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c19937216e9d3aa9956d9bb8dfc0b0c8beb6058fc4f7a4dc4d850edf86a237d6"
+checksum = "d750af042f7ef4f724306de029d18836c26c1765a54a6a3f094cbd23a7267ffa"
 
 [[package]]
 name = "linux-raw-sys"
@@ -481,8 +481,7 @@ dependencies = [
 [[package]]
 name = "props-util"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca3c8c2c05f160ce97db69ab8f94eb905857e21853a0e42b69b8eb0dc48927fa"
+source = "git+https://github.com/dineshadhi/props-util#c6b40e3d68940fd880cd4792851dce22c30f85e1"
 dependencies = [
  "anyhow",
  "proc-macro2",
@@ -835,10 +834,12 @@ dependencies = [
  "bytes",
  "dashmap",
  "futures-util",
+ "libc",
  "metrics",
  "opentelemetry",
  "props-util",
  "rand",
+ "socket2",
  "thiserror",
  "tokio",
  "tracing",

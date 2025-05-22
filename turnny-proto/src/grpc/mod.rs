@@ -2,7 +2,6 @@ use core::net;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use bytes::{Bytes, BytesMut};
-use grpc_ip_addr::Addr;
 use prost::Message;
 
 use crate::{
@@ -43,11 +42,11 @@ impl TryFrom<GrpcIpAddr> for SocketAddr {
         };
 
         match addr {
-            Addr::V4(IPv4 { ip, port }) => {
+            grpc_ip_addr::Addr::V4(IPv4 { ip, port }) => {
                 let addr = IpAddr::V4(Ipv4Addr::from_bits(ip));
                 Ok(SocketAddr::new(addr, port as u16))
             }
-            Addr::V6(IPv6 { ip, port }) => {
+            grpc_ip_addr::Addr::V6(IPv6 { ip, port }) => {
                 let bytes: [u8; 16] = match ip.try_into() {
                     Ok(b) => b,
                     Err(e) => {
@@ -66,11 +65,11 @@ impl TryFrom<SocketAddr> for GrpcIpAddr {
     type Error = CodingError;
     fn try_from(addr: net::SocketAddr) -> Result<Self, Self::Error> {
         let grpc_ip_addr = match addr {
-            SocketAddr::V4(v4) => Some(Addr::V4(IPv4 {
+            SocketAddr::V4(v4) => Some(grpc_ip_addr::Addr::V4(IPv4 {
                 ip: v4.ip().to_bits(),
                 port: v4.port() as u32,
             })),
-            SocketAddr::V6(v6) => Some(Addr::V6(IPv6 {
+            SocketAddr::V6(v6) => Some(grpc_ip_addr::Addr::V6(IPv6 {
                 ip: v6.ip().octets().as_slice().to_vec(),
                 port: v6.port() as u32,
             })),

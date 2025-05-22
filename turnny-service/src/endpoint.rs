@@ -2,11 +2,12 @@ use crate::session::{Protocol, SessionID};
 use async_trait::async_trait;
 use bytes::{Buf, Bytes, BytesMut};
 use dashmap::DashMap;
+use socket2::{Domain, Type};
 use std::{fmt::Debug, io, net::SocketAddr, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream, UdpSocket},
+    net::{TcpListener, TcpSocket, TcpStream, UdpSocket},
     sync::mpsc::{self, UnboundedSender, error::SendError},
     time::{error::Elapsed, timeout},
 };
@@ -38,14 +39,31 @@ impl Endpoint {
     }
 
     pub async fn build_tcp(self) -> Result<TcpEndpoint, io::Error> {
-        let listener = TcpListener::bind(self.listen_addr).await?;
-        Ok(TcpEndpoint::new(listener))
+        let socket = match self.listen_addr.is_ipv4() {
+            true => TcpSocket::new_v4()?,
+            false => TcpSocket::new_v6()?,
+        };
+
+        socket.set_reuseaddr(true)?;
+        socket.set_reuseport(true)?;
+        socket.bind(self.listen_addr)?;
+
+        Ok(TcpEndpoint::new(socket.listen(1024)?))
     }
 
     pub fn build_udp(self) -> Result<UdpEndpoint, io::Error> {
-        let socket = std::net::UdpSocket::bind(self.listen_addr)?;
+        let socket = match self.listen_addr.is_ipv4() {
+            true => socket2::Socket::new(Domain::IPV4, Type::DGRAM, Some(socket2::Protocol::UDP)),
+            false => socket2::Socket::new(Domain::IPV6, Type::DGRAM, Some(socket2::Protocol::UDP)),
+        }?;
+
+        // Uses socket2 crate to set reuseaddr and reuseport
         socket.set_nonblocking(true)?;
-        let socket = Arc::new(UdpSocket::from_std(socket)?);
+        socket.set_reuse_address(true)?;
+        socket.set_reuse_port(true)?;
+        socket.bind(&socket2::SockAddr::from(self.listen_addr))?;
+
+        let socket = Arc::new(UdpSocket::from_std(socket.into())?);
         Ok(UdpEndpoint::new(socket))
     }
 }
