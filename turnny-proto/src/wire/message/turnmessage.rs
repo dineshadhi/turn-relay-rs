@@ -1,7 +1,3 @@
-use bytes::{Buf, BufMut, Bytes, BytesMut};
-use ring::hmac::{self, HMAC_SHA1_FOR_LEGACY_USE_ONLY, Key, sign};
-use tracing::{Level, Span, span};
-
 use crate::{
     coding::{Decode, Encode},
     error::ProtoError,
@@ -11,6 +7,9 @@ use crate::{
         method::Method,
     },
 };
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use ring::hmac::{self, HMAC_SHA1_FOR_LEGACY_USE_ONLY, Key, sign};
+use tracing::{Level, Span, span};
 
 use super::{Cookie, StunMessage, TranID};
 

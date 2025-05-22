@@ -52,7 +52,7 @@ impl TryFrom<u16> for Method {
             0x0008 => Self::Permission(MKind::Request),
             0x0009 => Self::ChannelBind(MKind::Request),
             0x0004 => Self::Refresh(MKind::Request),
-            0x0006 | 0x0007 => return Err(CodingError::UnsupportedMethod),
+            0x0006 | 0x0007 => return Err(CodingError::UnsupportedMethod), // Send & Data
             0x0016 => Self::SendIndication,
             0x0017 => Self::DataIndication,
             x if (MIN_CHANNEL_NUMBER..MAX_CHANNEL_NUM).contains(&x) => Self::ChannelData(x),

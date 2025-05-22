@@ -1,6 +1,6 @@
 use rand::Rng;
 use std::sync::Mutex;
-use turn_proto::wire::error::TurnErrorCode;
+use turnny_proto::wire::error::TurnErrorCode;
 
 pub trait PortAllocator: Sync + Send + 'static {
     fn allocate_port(&self, username: &str) -> Result<u16, TurnErrorCode>;

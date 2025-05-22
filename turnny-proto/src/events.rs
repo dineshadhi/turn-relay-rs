@@ -1,4 +1,4 @@
-use crate::wire::message::{StunMessage, turnmessage::TurnMessage};
+use crate::wire::message::{turnmessage::TurnMessage, StunMessage};
 use bytes::{Buf, Bytes};
 use std::{fmt::Debug, net::SocketAddr};
 

@@ -88,11 +88,21 @@ impl TurnNode {
     }
 
     pub(crate) fn is_peer(&mut self, peer_addr: &SocketAddr) -> bool {
-        self.config.trusted_turn_ips.contains(&peer_addr.ip()) // If the is in trusted turn list, permission will be eventually granted upon request, so we consider it as peer
-            || self
-                .peers
-                .iter()
-                .any(|((addr, _), at)| addr == peer_addr && !is_expired!(*at, self.config.permission_max_time))
+        // If the peer_addr is in trusted turn list, permission will be eventually granted upon request, so we consider it as granted by default.
+        // NOTE : Chrome sends send indications right away after the Permission rquest before we grant permissions.
+        // The state machine will take two cycles to grant permission (Refer NeedsAuth Event).
+        // This trusted_ip_list ensures that there is no dropping of Send Indications.
+        let is_trusted = self.is_trusted_peer(peer_addr);
+        let is_peer = self
+            .peers
+            .iter()
+            .any(|((addr, _), at)| addr == peer_addr && !is_expired!(*at, self.config.permission_max_time));
+
+        is_trusted || is_peer
+    }
+
+    pub(crate) fn is_trusted_peer(&self, peer_addr: &SocketAddr) -> bool {
+        self.config.trusted_turn_ips.contains(&peer_addr.ip())
     }
 
     pub(crate) fn bind_channel(&mut self, peer_addr: SocketAddr, channel: u16) {
@@ -225,7 +235,7 @@ impl TurnNode {
     // Once the ips are added as trusted, no Permission Request (TurnEvent::NeedsPermission) will be sent to the app. SendIndications will be processed without explicit permission from the app.
     // If the IPaddr is foreign, a proper request must be sent to the app.
     pub(crate) fn is_permission_issued(&self, peer_addr: &SocketAddr) -> bool {
-        self.config.trusted_turn_ips.contains(&peer_addr.ip()) || self.permitted_peers.contains(peer_addr)
+        self.is_trusted_peer(peer_addr) || self.permitted_peers.contains(peer_addr)
     }
 
     pub fn set_realm(&mut self, realm: String) {

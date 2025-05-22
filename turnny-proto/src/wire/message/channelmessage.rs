@@ -1,11 +1,10 @@
-use bytes::{Buf, BufMut, Bytes};
-
 use crate::{
     coding::{Decode, Encode},
     compute_padding,
     error::ProtoError,
     wire::method::Method,
 };
+use bytes::{Buf, BufMut, Bytes};
 
 use super::StunMessage;
 
