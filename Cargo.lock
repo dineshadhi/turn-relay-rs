@@ -480,8 +480,9 @@ dependencies = [
 
 [[package]]
 name = "props-util"
-version = "0.2.0"
-source = "git+https://github.com/dineshadhi/props-util#c6b40e3d68940fd880cd4792851dce22c30f85e1"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8f3f6058159cd686234d791ee582b80dbc1124c1d87f7c7238a119fd64de308"
 dependencies = [
  "anyhow",
  "proc-macro2",
