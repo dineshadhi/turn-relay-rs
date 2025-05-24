@@ -13,16 +13,14 @@ categories = ["network-programming"]
 
 [dependencies]
 props-util = { workspace = true }
-prost = { version = "0.13.5" }
-anyhow = "1.0.97"
-base64 = "0.22.1"
-bytes = "1.10.1"
-dashmap = "6.1.0"
+anyhow = { workspace = true }
+tracing = { workspace = true }
+bytes = { workspace = true }
+rand = { workspace = true }
+thiserror = { workspace = true }
+prost =  "0.13.5"
 md5 = "0.7.0"
-rand = "0.9.0"
 ring = "0.17.14"
-thiserror = "2.0.12"
-tracing = "0.1.41"
 
 [dev-dependencies]
 hex = "0.4.3"
