@@ -35,7 +35,10 @@ impl std::fmt::Debug for TranID {
 impl Decode for TranID {
     type Output = Self;
     fn decode<B: Buf>(buffer: &mut B) -> Result<Self::Output, ProtoError> {
-        Ok(TranID(buffer.copy_to_bytes(TRAN_ID_LENGTH)))
+        match buffer.remaining() {
+            x if x < TRAN_ID_LENGTH => Err(ProtoError::NeedMoreData),
+            _ => Ok(TranID(buffer.copy_to_bytes(TRAN_ID_LENGTH))),
+        }
     }
 }
 
