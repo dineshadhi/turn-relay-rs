@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package isc.proto;
+
+message IPv4 {
+  fixed32 ip = 1;
+  uint32 port = 2;
+};
+
+message IPv6 {
+  bytes ip = 1;
+  uint32 port = 2;
+};
+
+message GrpcIpAddr {
+  oneof addr {
+    IPv4 v4 = 1;
+    IPv6 v6 = 2;
+  }
+}
+
+message TurnGRPCMessage {
+  GrpcIpAddr send_relay_addr = 1;
+  GrpcIpAddr recv_relay_addr = 2;
+  bytes data = 3 ;
+};

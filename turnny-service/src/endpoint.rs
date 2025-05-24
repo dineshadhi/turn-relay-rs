@@ -2,11 +2,12 @@ use crate::session::{Protocol, SessionID};
 use async_trait::async_trait;
 use bytes::{Buf, Bytes, BytesMut};
 use dashmap::DashMap;
+use socket2::{Domain, Type};
 use std::{fmt::Debug, io, net::SocketAddr, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream, UdpSocket},
+    net::{TcpListener, TcpSocket, TcpStream, UdpSocket},
     sync::mpsc::{self, UnboundedSender, error::SendError},
     time::{error::Elapsed, timeout},
 };
@@ -38,14 +39,31 @@ impl Endpoint {
     }
 
     pub async fn build_tcp(self) -> Result<TcpEndpoint, io::Error> {
-        let listener = TcpListener::bind(self.listen_addr).await?;
-        Ok(TcpEndpoint::new(listener))
+        let socket = match self.listen_addr.is_ipv4() {
+            true => TcpSocket::new_v4()?,
+            false => TcpSocket::new_v6()?,
+        };
+
+        socket.set_reuseaddr(true)?;
+        socket.set_reuseport(true)?;
+        socket.bind(self.listen_addr)?;
+
+        Ok(TcpEndpoint::new(socket.listen(1024)?))
     }
 
     pub fn build_udp(self) -> Result<UdpEndpoint, io::Error> {
-        let socket = std::net::UdpSocket::bind(self.listen_addr)?;
+        let socket = match self.listen_addr.is_ipv4() {
+            true => socket2::Socket::new(Domain::IPV4, Type::DGRAM, Some(socket2::Protocol::UDP)),
+            false => socket2::Socket::new(Domain::IPV6, Type::DGRAM, Some(socket2::Protocol::UDP)),
+        }?;
+
+        // Uses socket2 crate to set reuseaddr and reuseport
         socket.set_nonblocking(true)?;
-        let socket = Arc::new(UdpSocket::from_std(socket)?);
+        socket.set_reuse_address(true)?;
+        socket.set_reuse_port(true)?;
+        socket.bind(&socket2::SockAddr::from(self.listen_addr))?;
+
+        let socket = Arc::new(UdpSocket::from_std(socket.into())?);
         Ok(UdpEndpoint::new(socket))
     }
 }
@@ -83,6 +101,20 @@ impl EndpointStream {
             EndpointStream::Udp(_, socket, remote) => {
                 while data.has_remaining() {
                     let n = socket.send_to(data.chunk(), *remote).await?;
+                    data.advance(n);
+                }
+            }
+        };
+        Ok(())
+    }
+
+    /// Only works on UDP, panics if the stream is TCP.
+    pub async fn write_to<B: Buf>(&mut self, remote: SocketAddr, mut data: B) -> Result<(), io::Error> {
+        match self {
+            EndpointStream::Tcp(_) => panic!(),
+            EndpointStream::Udp(_, socket, _) => {
+                while data.has_remaining() {
+                    let n = socket.send_to(data.chunk(), remote).await?;
                     data.advance(n);
                 }
             }
@@ -136,7 +168,7 @@ impl TurnEndpoint for UdpEndpoint {
     // without worrying about underlying protocol.
     // TODO : Need more testing.
     // NOTE : accept() must be polled in loop continously for this to work on UDP. If not, no new packets will be read by the UDPSocket.
-    /// Returns a stream if a new connection is created. Until a new conn is created, it feeds the UDPDatagrams to the existing connections.
+    /// Returns a stream if a new connection is created. For TCP, it is straight forward. For UPD, until a new conn is created, it feeds the UDPDatagrams to the existing connections.
     async fn accept(&mut self) -> Result<(EndpointStream, SessionID), EndpointError> {
         loop {
             let mut buffer = BytesMut::with_capacity(2048);

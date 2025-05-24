@@ -12,6 +12,6 @@ pub struct ProtoConfig {
     pub nonce_max_time: u64,
     #[prop(default = "turn-rs")]
     pub realm: String,
-    #[prop(key = "trusted_turn_ips")]
+    #[prop(key = "trusted_turn_ips", default = "")]
     pub trusted_turn_ips: Vec<IpAddr>,
 }
