@@ -2,7 +2,7 @@ use crate::{
     config::InstanceConfig,
     endpoint::{Endpoint, TurnEndpoint},
     portallocator::{PortAllocator, RandomPortAllocator},
-    session::TurnSession,
+    session::{ISCSession, TurnSession},
 };
 use bytes::Bytes;
 use dashmap::DashMap;
@@ -13,7 +13,7 @@ use std::{
 };
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{Instrument, Level, field, span};
-use turn_proto::{config::ProtoConfig, events::InputEvent, wire::error::TurnErrorCode};
+use turnny_proto::{config::ProtoConfig, events::InputEvent, wire::error::TurnErrorCode};
 
 macro_rules! ipv4_listener_socket {
     ($port:expr) => {
@@ -50,6 +50,7 @@ mod state {
     pub struct Init {
         pub udp: Vec<u16>,
         pub tcp: Vec<u16>,
+        pub isc: Option<u16>,
         pub ipv6: bool,
         pub config: InstanceConfig,
     }
@@ -57,6 +58,7 @@ mod state {
     pub struct Build {
         pub endpoints_tcp: Vec<TcpEndpoint>,
         pub endpoints_udp: Vec<UdpEndpoint>,
+        pub isc_endpoint: Option<UdpEndpoint>,
         pub config: InstanceConfig,
     }
 
@@ -85,6 +87,7 @@ impl AppBuilder<Init> {
             inner: Init {
                 udp: vec![],
                 tcp: vec![],
+                isc: None,
                 ipv6: false,
                 config,
             },
@@ -106,6 +109,11 @@ impl AppBuilder<Init> {
         self
     }
 
+    pub fn with_isc(mut self, port: u16) -> Self {
+        self.inner.isc = Some(port);
+        self
+    }
+
     pub async fn build(self) -> AppBuilder<Build> {
         let mut endpoints_udp = Vec::new();
         for port in self.inner.udp {
@@ -123,11 +131,14 @@ impl AppBuilder<Init> {
             }
         }
 
+        let isc_endpoint = self.inner.isc.map(|port| Endpoint::new(ipv4_listener_socket!(port)).build_udp().unwrap());
+
         AppBuilder {
             inner: Build {
                 endpoints_tcp,
                 endpoints_udp,
                 config: self.inner.config,
+                isc_endpoint,
             },
         }
     }
@@ -150,12 +161,25 @@ impl AppBuilder<Build> {
         }
     }
 
+    async fn handle_isc_endpoint<T: TurnEndpoint, S: TurnService, P: PortAllocator>(mut endpoint: T, instance: Arc<TurnInstance<S, P>>) {
+        tracing::info!("TURN ISC Endpoint Listening : {:?}", endpoint);
+        loop {
+            match endpoint.accept().await {
+                Ok((stream, sid)) => {
+                    let isc_session = ISCSession::new(sid, stream, Arc::clone(&instance));
+                    tokio::spawn(async move { isc_session.run().await });
+                }
+                Err(e) => break tracing::error!("Error accepting connectin : {:?}", e),
+            }
+        }
+    }
+
     fn spawn<S: TurnService, P: PortAllocator>(self, service: S, allocator: P) {
         let instance = Arc::new(TurnInstance {
             service,
             allocator,
             config: self.inner.config.clone(),
-            proto_config: Arc::new(self.inner.config.into()), // Wrapping with a redundant Arc, because we need to pass it again to TurnNode later
+            proto_config: Arc::new(ProtoConfig::from(self.inner.config).unwrap()), // Wrapping with a redundant Arc, because we need to pass it again to TurnNode later
             relays: DashMap::new(),
         });
 
@@ -167,6 +191,11 @@ impl AppBuilder<Build> {
         for endpoint in self.inner.endpoints_tcp {
             let instance = Arc::clone(&instance);
             tokio::spawn(async move { Self::handle_endpoint(endpoint, instance).await });
+        }
+
+        if let Some(endpoint) = self.inner.isc_endpoint {
+            let instance = Arc::clone(&instance);
+            tokio::spawn(async move { Self::handle_isc_endpoint(endpoint, instance).await });
         }
     }
 
