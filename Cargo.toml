@@ -3,11 +3,19 @@ members = ["turnny-proto", "turnny-service", "turnny"]
 resolver = "2"
 
 [workspace.dependencies]
-props-util = "0.2.1" 
+props-util = "0.2.1"
 anyhow = "1.0.97"
 tracing = "0.1.41"
 bytes = "1.10.1"
 dashmap = "6.1.0"
 rand = "0.9.1"
 thiserror = "2.0.12"
-tokio = { version = "1.44.1", features = ["rt-multi-thread", "net", "io-util", "sync", "macros", "time", "signal"] }
+tokio = { version = "1.44.1", features = [
+    "rt-multi-thread",
+    "net",
+    "io-util",
+    "sync",
+    "macros",
+    "time",
+    "signal",
+] }
