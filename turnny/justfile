@@ -1,0 +1,10 @@
+run config="turnserver.conf" :
+    RUST_LOG=INFO cargo run -- --config {{config}}
+
+check flags="":
+	cargo test --all-targets --all-features {{flags}}
+	cargo clippy --all-targets --all-features {{flags}} -- -D warnings
+	cargo fmt --all --check
+
+release :
+    cargo build --release

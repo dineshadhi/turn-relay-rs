@@ -1,5 +1,5 @@
 [workspace]
-members = ["turnny-proto", "turnny-service"]
+members = ["turnny-proto", "turnny-service", "turnny"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -10,3 +10,4 @@ bytes = "1.10.1"
 dashmap = "6.1.0"
 rand = "0.9.1"
 thiserror = "2.0.12"
+tokio = { version = "1.44.1", features = ["rt-multi-thread", "net", "io-util", "sync", "macros", "time", "signal"] }

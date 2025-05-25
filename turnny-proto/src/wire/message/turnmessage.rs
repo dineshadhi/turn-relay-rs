@@ -124,7 +124,7 @@ impl TurnMessage {
         let realm = self.get_attr::<RealmAttr>()?;
         let credential = turnusername + ":" + &realm + ":" + password;
         let credential = md5::compute(credential).to_vec();
-        self.credential = Some(credential.clone());
+        self.credential = Some(credential.clone()); // Cache the credential
         Ok(credential)
     }
 
@@ -164,12 +164,10 @@ impl Decode for TurnMessage {
         let _cookie = Cookie::decode(buffer)?;
         let tid = TranID::decode(buffer)?;
 
-        if buffer.remaining() < attrlen {
-            return Err(ProtoError::NeedMoreData)?;
-        }
-
-        // Zero-Copy if underlying B is Bytes
-        let attrbytes = buffer.copy_to_bytes(attrlen);
+        let attrbytes = match buffer.remaining() {
+            remaining if (remaining < attrlen) => return Err(ProtoError::NeedMoreData)?,
+            _ => buffer.copy_to_bytes(attrlen), // Zero-Copy if underlying B is Bytes
+        };
 
         // Create a cursor so that attrbytes doesn't advance. We need it in place to compute Challenge blob.
         let mut cursor = std::io::Cursor::new(&attrbytes);

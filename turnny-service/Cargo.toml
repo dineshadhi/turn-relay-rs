@@ -11,12 +11,12 @@ dashmap = { workspace = true }
 rand = { workspace = true }
 thiserror = { workspace = true }
 props-util = { workspace = true }
+tokio = { workspace = true }
 async-trait = "0.1.88"
 futures-util = "0.3.31"
 libc = "0.2.172"
 metrics = "0.24.2"
 opentelemetry = "0.29.1"
 socket2 = "0.5.9"
-tokio = { version = "1.44.1", features = ["rt-multi-thread", "net", "io-util", "sync", "macros", "time"] }
 # from file system
 turnny-proto = { path = "../turnny-proto" }
