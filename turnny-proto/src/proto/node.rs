@@ -89,7 +89,7 @@ impl TurnNode {
 
     pub(crate) fn is_peer(&mut self, peer_addr: &SocketAddr) -> bool {
         // If the peer_addr is in trusted turn list, permission will be eventually granted upon request, so we consider it as granted by default.
-        // NOTE : Chrome sends send indications right away after the Permission rquest before we grant permissions.
+        // NOTE : Chrome sends send indications right away after the Permission rquest before we grant permissions. This approach begins dispatching the SendIndications without explicit permission to speed to Time to first Byte.
         // The state machine will take two cycles to grant permission (Refer NeedsAuth Event).
         // This trusted_ip_list ensures that there is no dropping of Send Indications.
         let is_trusted = self.is_trusted_peer(peer_addr);

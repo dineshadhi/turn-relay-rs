@@ -7,7 +7,7 @@ use std::{fmt::Debug, io, net::SocketAddr, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpSocket, TcpStream, UdpSocket},
+    net::{TcpListener, TcpStream, UdpSocket},
     sync::mpsc::{self, UnboundedSender, error::SendError},
     time::{error::Elapsed, timeout},
 };
@@ -40,15 +40,18 @@ impl Endpoint {
 
     pub async fn build_tcp(self) -> Result<TcpEndpoint, io::Error> {
         let socket = match self.listen_addr.is_ipv4() {
-            true => TcpSocket::new_v4()?,
-            false => TcpSocket::new_v6()?,
-        };
+            true => socket2::Socket::new(Domain::IPV4, Type::STREAM, Some(socket2::Protocol::TCP)),
+            false => socket2::Socket::new(Domain::IPV6, Type::STREAM, Some(socket2::Protocol::TCP)),
+        }?;
 
-        socket.set_reuseaddr(true)?;
-        socket.set_reuseport(true)?;
-        socket.bind(self.listen_addr)?;
+        // Uses socket2 crate to set reuseaddr and reuseport
+        socket.set_nonblocking(true)?;
+        socket.set_reuse_address(true)?;
+        socket.set_reuse_port(true)?;
+        socket.bind(&self.listen_addr.into())?;
 
-        Ok(TcpEndpoint::new(socket.listen(1024)?))
+        let listener = TcpListener::from_std(socket.into())?;
+        Ok(TcpEndpoint::new(listener))
     }
 
     pub fn build_udp(self) -> Result<UdpEndpoint, io::Error> {
@@ -61,7 +64,7 @@ impl Endpoint {
         socket.set_nonblocking(true)?;
         socket.set_reuse_address(true)?;
         socket.set_reuse_port(true)?;
-        socket.bind(&socket2::SockAddr::from(self.listen_addr))?;
+        socket.bind(&self.listen_addr.into())?;
 
         let socket = Arc::new(UdpSocket::from_std(socket.into())?);
         Ok(UdpEndpoint::new(socket))
@@ -111,15 +114,15 @@ impl EndpointStream {
     /// Only works on UDP, panics if the stream is TCP.
     pub async fn write_to<B: Buf>(&mut self, remote: SocketAddr, mut data: B) -> Result<(), io::Error> {
         match self {
-            EndpointStream::Tcp(_) => panic!(),
+            EndpointStream::Tcp(_) => Err(io::Error::new(io::ErrorKind::InvalidInput, "write_to() not supported for TCP Streams")),
             EndpointStream::Udp(_, socket, _) => {
                 while data.has_remaining() {
                     let n = socket.send_to(data.chunk(), remote).await?;
                     data.advance(n);
                 }
+                Ok(())
             }
-        };
-        Ok(())
+        }
     }
 }
 
@@ -131,6 +134,19 @@ pub struct TcpEndpoint {
 impl TcpEndpoint {
     fn new(listener: TcpListener) -> Self {
         Self { listener }
+    }
+}
+
+#[async_trait]
+impl TurnEndpoint for TcpEndpoint {
+    async fn accept(&mut self) -> Result<(EndpointStream, SessionID), EndpointError> {
+        let (stream, remote) = self.listener.accept().await?;
+        let sid = SessionID {
+            local: self.listener.local_addr()?,
+            remote,
+            protocol: Protocol::TCP,
+        };
+        Ok((EndpointStream::Tcp(stream), sid))
     }
 }
 
@@ -146,19 +162,6 @@ impl UdpEndpoint {
             socket,
             senders: DashMap::new(),
         }
-    }
-}
-
-#[async_trait]
-impl TurnEndpoint for TcpEndpoint {
-    async fn accept(&mut self) -> Result<(EndpointStream, SessionID), EndpointError> {
-        let (stream, remote) = self.listener.accept().await?;
-        let sid = SessionID {
-            local: self.listener.local_addr()?,
-            remote,
-            protocol: Protocol::TCP,
-        };
-        Ok((EndpointStream::Tcp(stream), sid))
     }
 }
 

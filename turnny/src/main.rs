@@ -9,7 +9,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use turnny_service::{
     config::InstanceConfig,
     error::TurnErrorCode,
-    instance::{AppBuilder, TurnService},
+    instance::{Instance, TurnService},
 };
 
 #[derive(Debug)]
@@ -34,7 +34,7 @@ pub fn setup_tracing() -> anyhow::Result<()> {
         .build();
 
     global::set_tracer_provider(provider.clone()); // Setting the provider as global provider
-    let tracer = provider.tracer("turn-rs"); // Make sure all the traces are attached to the subsriber
+    let tracer = provider.tracer("turnny-rs"); // Make sure all the traces are attached to the subsriber
 
     // This outputs the traces in the terminal
     tracing_subscriber::registry()
@@ -76,12 +76,14 @@ struct ServerConfig {
     pub max_alloc_time: u32,
     #[prop(default = "100")]
     pub session_idle_time: u64,
-    #[prop(default = "turn-rs")]
+    #[prop(env = "TURNNY_REALM", default = "turn-rs")]
     pub realm: String,
     #[prop(env = "TURNNY_UDP_PORTS", default = "3478")]
     pub udp_ports: Vec<u16>,
     #[prop(env = "TURNNY_TCP_PORTS", default = "3478")]
     pub tcp_ports: Vec<u16>,
+    #[prop(env = "TURNNY_ISC_PORT", default = "8443")]
+    pub isc_port: u16,
 }
 
 #[derive(Parser, Debug)]
@@ -106,15 +108,15 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Server Config : {:?}", config.clone());
 
-    AppBuilder::builder(InstanceConfig::from(config.clone())?)
+    Instance::builder(InstanceConfig::from(config.clone())?)
         .with_udp(config.udp_ports.clone())
         .with_tcp(config.tcp_ports.clone())
+        .with_isc(config.isc_port)
         .with_ipv6(config.ipv6)
-        .with_isc(8443)
         .build()
-        .await
+        .await?
         .run(service);
 
-    tokio::signal::ctrl_c().await.unwrap();
+    tokio::signal::ctrl_c().await?;
     Ok(())
 }

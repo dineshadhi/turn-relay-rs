@@ -1,6 +1,6 @@
 # NOTE : This project is under heavy development. The API and the structure of the code may change rapidly.
 
-# turn-rs
+# turnny-rs
 
 `turnny-rs` is a Rust implementation of a TURN (Traversal Using Relays around NAT) server based on RFC 8656.
 

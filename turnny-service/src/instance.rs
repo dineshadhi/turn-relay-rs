@@ -4,6 +4,7 @@ use crate::{
     portallocator::{PortAllocator, RandomPortAllocator},
     session::{ISCSession, TurnSession},
 };
+use anyhow::Context;
 use bytes::Bytes;
 use dashmap::DashMap;
 use state::{Build, Init};
@@ -77,16 +78,16 @@ pub struct TurnInstance<S: TurnService, P: PortAllocator> {
     pub relays: Relays,
 }
 
-pub struct AppBuilder<S: state::State = Init> {
+pub struct Instance<S: state::State = Init> {
     inner: S,
 }
 
-impl AppBuilder<Init> {
+impl Instance<Init> {
     pub fn builder(config: InstanceConfig) -> Self {
         Self {
             inner: Init {
-                udp: vec![],
-                tcp: vec![],
+                udp: Default::default(),
+                tcp: Default::default(),
                 isc: None,
                 ipv6: false,
                 config,
@@ -114,37 +115,60 @@ impl AppBuilder<Init> {
         self
     }
 
-    pub async fn build(self) -> AppBuilder<Build> {
+    pub async fn build(self) -> anyhow::Result<Instance<Build>> {
         let mut endpoints_udp = Vec::new();
         for port in self.inner.udp {
-            endpoints_udp.push(Endpoint::new(ipv4_listener_socket!(port)).build_udp().unwrap());
+            endpoints_udp.push(
+                Endpoint::new(ipv4_listener_socket!(port))
+                    .build_udp()
+                    .context("Error binding endpoint with port : {port}")?,
+            );
             if self.inner.ipv6 {
-                endpoints_udp.push(Endpoint::new(ipv6_listener_socket!(port)).build_udp().unwrap());
+                endpoints_udp.push(
+                    Endpoint::new(ipv6_listener_socket!(port))
+                        .build_udp()
+                        .context("Error binding endpoint with port : {port}")?,
+                );
             }
         }
 
         let mut endpoints_tcp = Vec::new();
         for port in self.inner.tcp {
-            endpoints_tcp.push(Endpoint::new(ipv4_listener_socket!(port)).build_tcp().await.unwrap());
+            endpoints_tcp.push(
+                Endpoint::new(ipv4_listener_socket!(port))
+                    .build_tcp()
+                    .await
+                    .context("Error binding endpoint with port : {port}")?,
+            );
             if self.inner.ipv6 {
-                endpoints_tcp.push(Endpoint::new(ipv6_listener_socket!(port)).build_tcp().await.unwrap());
+                endpoints_tcp.push(
+                    Endpoint::new(ipv6_listener_socket!(port))
+                        .build_tcp()
+                        .await
+                        .context("Error binding endpoint with port : {port}")?,
+                );
             }
         }
 
-        let isc_endpoint = self.inner.isc.map(|port| Endpoint::new(ipv4_listener_socket!(port)).build_udp().unwrap());
+        let isc_endpoint = self.inner.isc.map(|port| {
+            Endpoint::new(ipv4_listener_socket!(port))
+                .build_udp()
+                .context("Error binding endpoint with port : {port}")
+                .unwrap()
+        });
 
-        AppBuilder {
+        Ok(Instance {
             inner: Build {
                 endpoints_tcp,
                 endpoints_udp,
                 config: self.inner.config,
                 isc_endpoint,
             },
-        }
+        })
     }
 }
 
-impl AppBuilder<Build> {
+impl Instance<Build> {
     async fn handle_endpoint<T: TurnEndpoint, S: TurnService, P: PortAllocator>(mut endpoint: T, instance: Arc<TurnInstance<S, P>>) {
         tracing::info!("TURN Endpoint Listening : {:?}", endpoint);
         loop {
