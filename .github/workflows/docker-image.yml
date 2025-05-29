@@ -33,5 +33,4 @@ jobs:
           context : .
           push : true
           tags : |
-            gchr.io/${{ github.repository_owner }}/turnny:${{ github.sha }}
-            gchr.io/${{ github.repository_owner }}/turnny:latest
+            turnny:latest
