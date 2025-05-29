@@ -1,5 +1,5 @@
 #Building stage
-FROM rust:1.86 as build
+FROM rust:1.86 AS build
 
 COPY . ./build
 WORKDIR /build
@@ -11,7 +11,7 @@ RUN apt-get update && \
 RUN cargo build --release
 
 # Runtime stage
-FROM ubuntu:24.04 as turnny
+FROM ubuntu:24.04 AS turnny
 RUN apt-get update
 WORKDIR /app
 COPY --from=build /build/target/release/turnny /usr/local/bin/turnny
