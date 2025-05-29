@@ -22,10 +22,8 @@ impl TurnService for CustomTurnService {
 }
 
 pub fn setup_tracing() -> anyhow::Result<()> {
-    let resource = opentelemetry_sdk::Resource::builder().with_service_name("turn-rs").build();
-
-    // Build a Span Exporter. Exports the Traces and Spans via GRPC.
-    let exporter = opentelemetry_otlp::SpanExporter::builder().with_tonic().build()?;
+    let resource = opentelemetry_sdk::Resource::builder().with_service_name("turnny-rs").build();
+    let exporter = opentelemetry_otlp::SpanExporter::builder().with_tonic().build()?; // Build a Span Exporter. Exports the Traces and Spans via GRPC.
 
     // A Provider that batches the spans and uses the exporter
     let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
@@ -66,6 +64,14 @@ struct ServerConfig {
     pub server_addr: Ipv4Addr,
     #[prop(env = "TURNNY_SERVER_ADDR_V6")]
     pub server_addr_v6: Option<Ipv6Addr>,
+    #[prop(env = "TURNNY_REALM", default = "turn-rs")]
+    pub realm: String,
+    #[prop(env = "TURNNY_UDP_PORTS", default = "3478")]
+    pub udp_ports: Vec<u16>,
+    #[prop(env = "TURNNY_TCP_PORTS", default = "3478")]
+    pub tcp_ports: Vec<u16>,
+    #[prop(env = "TURNNY_ISC_PORT")]
+    pub isc_port: Option<u16>,
     #[prop(env = "TURNNY_IPV6", default = "true")]
     pub ipv6: bool,
     #[prop(default = "600")]
@@ -76,14 +82,6 @@ struct ServerConfig {
     pub max_alloc_time: u32,
     #[prop(default = "100")]
     pub session_idle_time: u64,
-    #[prop(env = "TURNNY_REALM", default = "turn-rs")]
-    pub realm: String,
-    #[prop(env = "TURNNY_UDP_PORTS", default = "3478")]
-    pub udp_ports: Vec<u16>,
-    #[prop(env = "TURNNY_TCP_PORTS", default = "3478")]
-    pub tcp_ports: Vec<u16>,
-    #[prop(env = "TURNNY_ISC_PORT", default = "8443")]
-    pub isc_port: u16,
 }
 
 #[derive(Parser, Debug)]

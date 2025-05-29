@@ -110,8 +110,8 @@ impl Instance<Init> {
         self
     }
 
-    pub fn with_isc(mut self, port: u16) -> Self {
-        self.inner.isc = Some(port);
+    pub fn with_isc(mut self, port: Option<u16>) -> Self {
+        self.inner.isc = port;
         self
     }
 
