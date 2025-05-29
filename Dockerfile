@@ -1,5 +1,5 @@
 #Building stage
-FROM rust:1.86 AS build
+FROM rust:1.86 as build
 
 COPY . ./build
 WORKDIR /build
