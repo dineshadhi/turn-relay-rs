@@ -98,10 +98,10 @@ async fn main() -> anyhow::Result<()> {
     let args = TurnArgs::parse();
     let config = match args.config {
         Some(config) => config,
-        None => std::env::var("TURN_SERVER_CONFIG").expect("Config is not set. Either set env TURN_SERVER_CONFIG or use flag --config <config-path>"),
+        None => std::env::var("TURN_SERVER_CONFIG").unwrap_or("./turnserver.conf".into()),
     };
 
-    let config = ServerConfig::from_file(&config)?;
+    let config = ServerConfig::from_file(&config).expect("Unable to load config : {config}");
     let service = CustomTurnService {};
 
     tracing::info!("Server Config : {:?}", config.clone());

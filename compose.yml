@@ -4,8 +4,8 @@ services :
     container_name : turnny
     environment :
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://233.123.12.4:4317
-      - TURNNY_TCP_PORTS=3478,3479
-      - TURNNY_UDP_PORTS=3478,3479
+      - TURNNY_TCP_PORTS=3478
+      - TURNNY_UDP_PORTS=3478
       - RUST_LOG=INFO
     volumes :
       - ./turnserver.conf:/app/turnserver.conf

@@ -121,13 +121,13 @@ impl Instance<Init> {
             endpoints_udp.push(
                 Endpoint::new(ipv4_listener_socket!(port))
                     .build_udp()
-                    .context("Error binding endpoint with port : {port}")?,
+                    .context(format!("Error binding endpoint with port : {port}"))?,
             );
             if self.inner.ipv6 {
                 endpoints_udp.push(
                     Endpoint::new(ipv6_listener_socket!(port))
                         .build_udp()
-                        .context("Error binding endpoint with port : {port}")?,
+                        .context(format!("Error binding endpoint with port : {port}"))?,
                 );
             }
         }
@@ -138,14 +138,14 @@ impl Instance<Init> {
                 Endpoint::new(ipv4_listener_socket!(port))
                     .build_tcp()
                     .await
-                    .context("Error binding endpoint with port : {port}")?,
+                    .context(format!("Error binding endpoint with port : {port}"))?,
             );
             if self.inner.ipv6 {
                 endpoints_tcp.push(
                     Endpoint::new(ipv6_listener_socket!(port))
                         .build_tcp()
                         .await
-                        .context("Error binding endpoint with port : {port}")?,
+                        .context(format!("Error binding endpoint with port : {port}"))?,
                 );
             }
         }
